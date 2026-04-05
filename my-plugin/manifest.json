@@ -1,0 +1,10 @@
+{
+	"id": "plot-plugin",
+	"name": "Plot Plugin",
+	"version": "1.0.0",
+	"main": "main.js",
+	"minAppVersion": "0.15.0",
+	"description": "Adds plotting mathematical expressions to obsidian",
+	"author": "Jomar Cardona",
+	"isDesktopOnly": false
+}
