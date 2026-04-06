@@ -1,22 +1,33 @@
 
-import {Chart} from "chart.js/auto";
 
-export function createPlot(canvas: HTMLCanvasElement, data: object) {
+import Chart from "chart.js/auto";
+import type {PlotData,Data} from "./parser"
+
+export function createPlot(canvas: HTMLCanvasElement, data: PlotData[]) {
+    Chart.getChart(canvas)?.destroy();
+    const datasets = data.map(eq => ({
+        label: eq.signature,
+        data: eq.data.map((p: Data) => ({ x: p.x, y: p.y})),
+        borderWidth: 2,
+        pointRadius: 0,
+    }))
+
+
     new Chart(canvas, {
     type: "line",
     data: {
-        datasets: [{
-        label: "Some Function",
-        data: data,   // already in correct format
-        borderWidth: 2,
-        pointRadius: 0
-        }]
-    },
+        datasets: datasets},
     options: {
         scales: {
-        x: { type: "linear" }
+        x: { 
+            type: "linear",
+            min: -10,
+            max: 10
+         },
+        y: {
+            type: "linear"
+        }
         }
     }
     });
 }
-

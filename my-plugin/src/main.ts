@@ -1,5 +1,5 @@
 
-import {evaluateExpression, splitMarkdown, getEquations} from "./parser"
+import {evaluateExpressions, splitMarkdown, getEquations, getExprObjects} from "./parser"
 import { createPlot } from "./graphs";
 import {Plugin} from "obsidian";
 
@@ -8,15 +8,19 @@ export default class PlotPlugin extends Plugin {
 		this.registerMarkdownCodeBlockProcessor("plot", 
 			(source: string, el: HTMLElement) => {
 			
-			const canvas = document.createElement("canvas");
+			const canvas = document.createElement("canvas"); 
+			canvas.style.width = "100%";
+			canvas.style.height = "300px";
 			el.appendChild(canvas);
 
-			const text = splitMarkdown(source);
-			const allExpr = getEquations(text);
-			if (!allExpr[0]) return;
+			const codeBlock = splitMarkdown(source); // Splits markdown code block by line
 
-			const expr = allExpr[0];
-			const data = evaluateExpression(expr);
+			const allExpr = getEquations(codeBlock); // gets all equations on the codeblock in one array
+			
+			const exprObjects = getExprObjects(allExpr); // gets array with all expression objects
+
+			const data = evaluateExpressions(exprObjects);
+			
 			
 			createPlot(canvas,data);
 			
