@@ -1,5 +1,7 @@
 // This file contains the necessary functions to receive, PARSE, and interpret the markdown code blocks.
 // This includes intepreting and calculating the functions, limits for plotting, etc. 
+import { number } from "mathjs";
+import { kldivergence } from "mathjs";
 import { string } from "mathjs";
 import {create , all} from "mathjs";
 
@@ -52,23 +54,23 @@ export function splitMarkdown(markdown: string) {
     return lines;
 }
 
-export function handleLineProperties(markdown: string[]): LineProperties[] {
-   const regex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Property line pattern
-
+export function handleLineProperties(markdown: string[]): LineProperties[] { 
+   //const regex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Property line pattern
+   //const alternateRegex = /^\s*[a-zA-Z]\.[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*".*"/;
+   const combinedRegex = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/;
    const parsed = markdown.flatMap(s => {
-    const match = s.match(regex);
-    if (!match) return [];
+    const match = s.match(combinedRegex);
+    if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return [];
 
-    const [, signature, property, value = ""] =
-      match as [string, string, string, string, string];
+    const signature = match[1];
+    const property = match[2];
+    const value = match[3];
+    //console.log(`${property} = ${value}`);
+    return [{signature,property,value}];
 
-    return [{
-      signature: signature.replace(/\s+/g, ''),
-      property,
-      value: value.replace(/['"]/g, '')
-    }];
+
     });
-    return parsed;
+    return parsed; // Returns an array of type LineProperties that contains all properties 
 }
 
 export function getExprObjects(exprs: RawExpr[]): Equation[] {
@@ -83,11 +85,11 @@ export function getExprObjects(exprs: RawExpr[]): Equation[] {
 
 export function getEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
     const exprs = []
-    const propertyRegex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/;
+    const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
 
 
     for (let line of lines) {
-        if (propertyRegex.test(line)) continue;
+        if (!equationRegex.test(line)) continue;
 
         if (line.includes("=")) {
             // Equation found. Add it to array
@@ -123,13 +125,18 @@ export function getVariable(expr: Equation) {
 
 
 
-export function evaluateExpressions(equations: Equation[]) {
+export function evaluateExpressions(equations: Equation[], parsedMd: LineProperties[]) {
     const results = [];
-    
+    let xRange: [number, number, number] = [-100,100,1];
+
     for (let equation of equations) {
+        const limits = parsedMd.filter(l => l.signature === equation.signature && l.property === "xrange");
+
+        if (limits.length !== 0 && limits !== undefined && limits[0]?.value ) {
+            xRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
+        }
         const arr = [];
         // equation is an equation object
-        const x_limits: [number, number, number] = equation.x_limits; // Using tuples. [Min, Max, Step]
 
         const vars = getVariable(equation).filter((v) => !builtInConstants.includes(v)); // vars can include builtInConstants that need to be filtered out so they arent recognized as the variable.
 
@@ -138,7 +145,7 @@ export function evaluateExpressions(equations: Equation[]) {
 
         //console.log(vars);
         
-        for (let val = x_limits[0]; val <= x_limits[1]; val += x_limits[2]) {
+        for (let val = xRange[0]; val <= xRange[1]; val += xRange[2]) {
             const scope = {[variable]:val}
             const y = compile.evaluate(scope);
             arr.push({x:val,y});

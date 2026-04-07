@@ -17,25 +17,31 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
         const dataset: Dataset = {
             label: eq.signature,
             data: eq.data.map((p: Data) => ({ x: p.x, y: p.y})),
+            borderWidth: 2,
+            pointStyle: "circle",
+            pointRadius: 1
+            
         };
-        const props = parsedMd.filter(p => p.signature === eq.signature);
-        props.forEach(p => {
-            dataset[p.property] = p.value;
+        const props = parsedMd.filter(p => p.signature === eq.signature); // Create array with signatures that match eq signature
+
+        props.forEach(p => { // Traverse array of filtered properties. And add the property 
+            //console.log(`${p.property} = ${p.value}`);
+            dataset[p.property] = p.value; 
         });
         return dataset
     });
-
+    //console.log(datasets);
 
     new Chart(canvas, {
     type: "line",
     data: {
         datasets: datasets},
     options: {
+        responsive: true,
+        maintainAspectRatio: false,
         scales: {
         x: { 
             type: "linear",
-            min: -10,
-            max: 10
          },
         y: {
             type: "linear"

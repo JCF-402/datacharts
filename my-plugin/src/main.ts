@@ -20,7 +20,7 @@ export default class PlotPlugin extends Plugin {
 			
 			const exprObjects = getExprObjects(allExpr); // gets array with all expression objects
 
-			const data = evaluateExpressions(exprObjects);
+			const data = evaluateExpressions(exprObjects,parsedMd);
 			
 			
 			createPlot(canvas,data,parsedMd);
