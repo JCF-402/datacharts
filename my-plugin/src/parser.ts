@@ -1,6 +1,6 @@
 // This file contains the necessary functions to receive, PARSE, and interpret the markdown code blocks.
 // This includes intepreting and calculating the functions, limits for plotting, etc. 
-import { number } from "mathjs";
+import { string } from "mathjs";
 import {create , all} from "mathjs";
 
 const math = create(all);
@@ -18,8 +18,8 @@ export type Equation = {
     expr: string,
     signature: string,
     x_limits: [number, number, number],
-    color?: string,
-    marker?: string,
+    borderColor?: string,
+    pointStyle?: string,
 }
 
 export type RawExpr = {
@@ -36,7 +36,40 @@ export type Data = {
     y: number
 }
 
+export type LineProperties = {
+    signature: string,
+    property: string,
+    value: string
+}
+
+
+
 const builtInConstants = ["e","E","pi","PI"];
+
+
+export function splitMarkdown(markdown: string) {
+    const lines = markdown.split("\n"); // Splits code block by new lines.
+    return lines;
+}
+
+export function handleLineProperties(markdown: string[]): LineProperties[] {
+   const regex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Property line pattern
+
+   const parsed = markdown.flatMap(s => {
+    const match = s.match(regex);
+    if (!match) return [];
+
+    const [, signature, property, value = ""] =
+      match as [string, string, string, string, string];
+
+    return [{
+      signature: signature.replace(/\s+/g, ''),
+      property,
+      value: value.replace(/['"]/g, '')
+    }];
+    });
+    return parsed;
+}
 
 export function getExprObjects(exprs: RawExpr[]): Equation[] {
     // Create new array with all objects. Input must be a string array with all right side equations.
@@ -48,11 +81,24 @@ export function getExprObjects(exprs: RawExpr[]): Equation[] {
     // Returns array containing all equation objects for the codeblock
 }
 
-export function splitMarkdown(markdown: string) {
-    const lines = markdown.split("\n"); // Splits code block by new lines.
-    return lines;
-}
+export function getEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
+    const exprs = []
+    const propertyRegex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/;
 
+
+    for (let line of lines) {
+        if (propertyRegex.test(line)) continue;
+
+        if (line.includes("=")) {
+            // Equation found. Add it to array
+            const expr = line.split("=");
+            if (expr[1] && expr[0]) { // expr[1] is the right hand of the equation and expr[0] is the left hand side or the signature.
+                exprs.push({signature: expr[0].trim(), expr:expr[1].trim()}); // Need to handle undefined later
+            }
+        }
+    }
+    return exprs; //Array of RawExpr objects
+}
 
 
 export function getVariable(expr: Equation) {
@@ -75,20 +121,6 @@ export function getVariable(expr: Equation) {
 
 }
 
-export function getEquations(lines: string[]) {
-    const exprs = []
-    for (let line of lines) {
-        if (line.includes("=")) {
-            // Equation found. Add it to array
-            const expr = line.split("=");
-            if (expr[1] && expr[0]) { // expr[1] is the right hand of the equation and expr[0] is the left hand side or the signature.
-                exprs.push({signature: expr[0].trim(), expr:expr[1].trim()}); // Need to handle undefined later
-            }
-        }
-    }
-
-    return exprs; //Array of RawExpr objects
-}
 
 
 export function evaluateExpressions(equations: Equation[]) {

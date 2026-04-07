@@ -1,16 +1,29 @@
 
 
 import Chart from "chart.js/auto";
-import type {PlotData,Data} from "./parser"
+import type {PlotData,Data,LineProperties} from "./parser"
 
-export function createPlot(canvas: HTMLCanvasElement, data: PlotData[]) {
-    Chart.getChart(canvas)?.destroy();
-    const datasets = data.map(eq => ({
-        label: eq.signature,
-        data: eq.data.map((p: Data) => ({ x: p.x, y: p.y})),
-        borderWidth: 2,
-        pointRadius: 0,
-    }))
+type Dataset = {
+    label: string,
+    data: Data[];
+    [key: string]: number | string | Data[]
+}
+
+export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[] ) {
+    Chart.getChart(canvas)?.destroy(); // If a canvas exists. Destroy it.
+
+
+    const datasets = data.map(eq => {
+        const dataset: Dataset = {
+            label: eq.signature,
+            data: eq.data.map((p: Data) => ({ x: p.x, y: p.y})),
+        };
+        const props = parsedMd.filter(p => p.signature === eq.signature);
+        props.forEach(p => {
+            dataset[p.property] = p.value;
+        });
+        return dataset
+    });
 
 
     new Chart(canvas, {
