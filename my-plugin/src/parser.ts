@@ -1,20 +1,15 @@
 // This file contains the necessary functions to receive, PARSE, and interpret the markdown code blocks.
 // This includes intepreting and calculating the functions, limits for plotting, etc. 
-import { number } from "mathjs";
-import { kldivergence } from "mathjs";
-import { string } from "mathjs";
+
 import {create , all} from "mathjs";
+
+import type {ChartOptions} from "chart.js/auto";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
     ln: math.log,
 });
 
-export type LPlot = {
-    equation: Equation[],
-    x_range?: number[],
-    y_range?: number[],
-}
 
 export type Equation = {
     expr: string,
@@ -47,6 +42,24 @@ export type LineProperties = {
 
 
 const builtInConstants = ["e","E","pi","PI"];
+const validPlotProperties = [
+    "x.type",
+    "x.grid",
+    "x.min",
+    "x.max",
+    "x.ticks",
+    "x.title",
+    "y.type",
+    "y.grid",
+    "y.min",
+    "y.max",
+    "y.ticks",
+    "y.title",
+    "legend.display",
+    "legend.position",
+    "title",
+    "subtitle"
+]
 
 
 export function splitMarkdown(markdown: string) {
@@ -55,8 +68,7 @@ export function splitMarkdown(markdown: string) {
 }
 
 export function handleLineProperties(markdown: string[]): LineProperties[] { 
-   //const regex = /^\s*([a-zA-Z]\w*\([a-zA-Z]\w*\))\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Property line pattern
-   //const alternateRegex = /^\s*[a-zA-Z]\.[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*".*"/;
+
    const combinedRegex = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/;
    const parsed = markdown.flatMap(s => {
     const match = s.match(combinedRegex);
@@ -71,6 +83,74 @@ export function handleLineProperties(markdown: string[]): LineProperties[] {
 
     });
     return parsed; // Returns an array of type LineProperties that contains all properties 
+}
+
+export function handlePlotProperties(markdown: string[]) {
+    const properties: ChartOptions<"line"> = {
+    scales: {
+        x: { type: "linear" },
+        y: { type: "linear" }
+    }
+    };
+    const plotProperties = markdown.filter(p => p.startsWith("obj.")); //plotProperties = [x.type = "linear", y.type = "linear"]
+
+    plotProperties.forEach(prop => {
+        const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["x.type","linear"]
+        const key = rawKey?.replace("obj.","");
+        if (key !== undefined && value !== undefined) { //Type Narrowing
+            if (validPlotProperties.includes(key)) { 
+                if (key.startsWith("x") || key.startsWith("y")) {
+                    helperPlotProperties(properties,key,value,"scales");
+                }
+                else {
+                    helperPlotProperties(properties,key,value,"plugins");
+                }
+            }
+        }
+
+
+    });
+    return properties;
+
+}
+function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string,parent: string) {
+    const path = `${parent}.${key}`.split(".");
+    let current: any = properties;
+
+    for (let i = 0; i < path.length; i++) {
+        const k = path[i];
+        if (!k) return;
+
+        if (i === path.length - 1) {
+            const parsed = parseValue(value);
+
+            if (k === "grid") {
+                current[k] = { display: parsed };
+            }
+            else if ((path.includes("plugins") || path.includes("scales")) && (k === "title" || k === "subtitle")) {
+                current[k] = { display: true, text: parsed };
+            }
+            else if (k === "ticks") {
+                current[k] = {};
+            }
+            else if (path.includes("plugins") && (k === "legend")) {
+                current[k] = {display: parsed};
+            }
+            else {
+                current[k] = parsed;
+            }
+        }
+        else {
+            current[k] ??= {};
+            current = current[k];
+    }}
+}
+
+function parseValue(value: string) {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    if (!isNaN(Number(value))) return Number(value);
+    return value;
 }
 
 export function getExprObjects(exprs: RawExpr[]): Equation[] {
