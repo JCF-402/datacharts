@@ -16,6 +16,8 @@ Chart.defaults.plugins.legend.position = "right";
 Chart.defaults.responsive = true;
 Chart.defaults.maintainAspectRatio = false;
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.title.display = true;
+
 
 export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartOptions<"line"> ) {
     Chart.getChart(canvas)?.destroy(); // If a canvas exists. Destroy it. Generate fresh.

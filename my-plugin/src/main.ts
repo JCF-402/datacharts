@@ -1,7 +1,5 @@
 
-import {evaluateExpressions, splitMarkdown, getEquations, getExprObjects, handleLineProperties, handlePlotProperties,
-	handleGlobalProperties,
-} from "./parser"
+import {handleMarkdown,handleGlobalOptions, evaluateExpressions} from "./parser"
 import { createPlot } from "./graphs";
 import {Notice, Plugin} from "obsidian";
 
@@ -18,16 +16,11 @@ export default class PlotPlugin extends Plugin {
 
 			el.appendChild(canvas);
 
-			const codeBlock = splitMarkdown(source); // Splits markdown code block by line
-
-			const allExpr = getEquations(codeBlock); // gets all equations on the codeblock in one array
-			const parsedMd = handleLineProperties(codeBlock); // gets all properties defined by user for each equation, if any.
-			
-			const exprObjects = getExprObjects(allExpr); // gets array with all expression objects
+			const parsedText = handleMarkdown(source);
 
 			// Handling possible global range property
 			let globalXRange: [number, number, number] = [-10,10,0.1];
-			const line = (handleGlobalProperties(codeBlock)).find(s => s.includes("xrange"));
+			const line = (parsedText.globalProperties).find(s => s.includes("xrange"));
 			if (line !== undefined) {
 				const rhs = line.split("=")[1];
 				if (rhs !== undefined) {
@@ -40,12 +33,11 @@ export default class PlotPlugin extends Plugin {
 				}
 			}
 
-			const data = evaluateExpressions(exprObjects,parsedMd,globalXRange);
-			const plotProperties = handlePlotProperties(codeBlock)
+			const data = evaluateExpressions(parsedText.equations,parsedText.lineProperties,globalXRange);
 
-			console.log(JSON.stringify(plotProperties, null, 2));
+			console.log(JSON.stringify(parsedText.chartOptions, null, 2));
 
-			createPlot(canvas,data,parsedMd,plotProperties);
+			createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions);
 			
 
 			function isTuple(arr: number[]): arr is [number, number, number] {

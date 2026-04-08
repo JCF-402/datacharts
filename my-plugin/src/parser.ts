@@ -1,5 +1,3 @@
-// This file contains the necessary functions to receive, PARSE, and interpret the markdown code blocks.
-// This includes intepreting and calculating the functions, limits for plotting, etc. 
 
 import {create , all} from "mathjs";
 
@@ -42,110 +40,146 @@ export type LineProperties = {
 }
 
 
+type parsedText = {
+    lineProperties: LineProperties[],
+    chartOptions: ChartOptions<"line">,
+    globalProperties: string[],
+    equations: Equation[]
+}
 
+type optionTransform = {
+
+}
 const builtInConstants = ["e","E","pi","PI"];
+/*
 const validPlotProperties = [
-    "x.type",
-    "x.grid",
-    "x.min",
-    "x.max",
-    "x.ticks",
-    "x.title",
-    "y.type",
-    "y.grid",
-    "y.min",
-    "y.max",
-    "y.ticks",
-    "y.title",
-    "legend.display",
-    "legend.position",
+    "type",
+    "grid",
+    "min",
+    "max",
+    "ticks",
+    "display",
+    "position",
     "title",
     "subtitle",
-    "x.grid.color",
-    "x.title.color",
-    "global.xrange"
+    "color",
+    "color",
+    "xrange",
+    "text",
 ]
+*/
+const validPlotProperties = [
+  "type",
+  "min",
+  "max",
+  "display",
+  "position",
+  "text",
+  "color",
+  "stepSize",
+  "beginAtZero",
+  "suggestedMin",
+  "suggestedMax",
+  "lineWidth",
+  "drawBorder",
+  "drawOnChartArea",
+  "drawTicks",
+  "tickLength",
+  "mode",
+  "intersect",
+  "enabled",
+  "borderColor",
+  "backgroundColor",
+  "borderWidth",
+  "pointRadius",
+  "tension",
+  "fill",
+  "hidden"
+];
 
 
-export function splitMarkdown(markdown: string) {
-    const lines = markdown.split("\n"); // Splits code block by new lines.
-    return lines;
-}
 
-export function handleLineProperties(markdown: string[]): LineProperties[] { 
+export function handleMarkdown(markdown: string): parsedText {
+    const lines = markdown.split("\n");
+    const propertyPattern = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
+    const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
 
-   const combinedRegex = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/;
-   const parsed = markdown.flatMap(s => {
-    const match = s.match(combinedRegex);
-    if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return [];
+    // something.property = value
+    let lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
+    let chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj."))); // Plot properties are "obj.property = value"
+    let globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global.")));
+    let equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
 
-    const signature = match[1];
-    const property = match[2];
-    const value = match[3];
-    //console.log(`${property} = ${value}`);
-    return [{signature,property,value}];
-
-
-    });
-    return parsed; // Returns an array of type LineProperties that contains all properties 
-}
-
-export function handlePlotProperties(markdown: string[]) {
-    const properties: ChartOptions<"line"> = {
-    scales: {
-        x: { type: "linear" },
-        y: { type: "linear" }
+    const parsedText: parsedText = {
+        lineProperties: lineProperties,
+        chartOptions: chartOptions,
+        globalProperties: globalOptions,
+        equations: equations,
     }
-    };
-    const plotProperties = markdown.filter(p => p.startsWith("obj.")); //plotProperties = [x.type = "linear", y.type = "linear"]
+    return parsedText;
+}
 
-    plotProperties.forEach(prop => {
-        const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["x.type","linear"]
-        const key = rawKey?.replace("obj.","");
-        if (key !== undefined && value !== undefined) { //Type Narrowing
-            if (validPlotProperties.includes(key)) { 
-                if (key.startsWith("x") || key.startsWith("y")) {
-                    helperPlotProperties(properties,key,value,"scales");
-                }
-                else {
-                    helperPlotProperties(properties,key,value,"plugins");
-                }
+export function handleLineProperties(lines: string[], pattern: RegExp): LineProperties[] { 
+
+    const lineProperties = lines.flatMap(s => {
+        const match = s.match(pattern);
+        if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return [];
+        const signature = match[1];
+        const property = match[2];
+        const value = match[3];
+        return [{signature,property,value}];
+    });
+    return lineProperties; // Returns an array of type LineProperties that contains all properties 
+}
+
+export function handlePlotProperties(lines: string[]) {
+    const defaultProperties: ChartOptions<"line"> = {
+    scales: {
+        x: { type: "linear", 
+            title: {
+                display: true,
+            } },
+        y: { type: "linear", 
+            title: {
+                display: true,
             }
         }
+    },
+    plugins: {
+        title: {
+            display: true,
+        }
+    }
+    };
 
+    lines.forEach(prop => {
+        const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["obj.scales.x.type","linear"]
+        const key = rawKey?.replace("obj.",""); // obj.x.title -> scales.x.title
 
-    });
-    return properties;
-
-}
-function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string,top_level: string) {
-    const path = `${top_level}.${key}`.split(".");
-    let current: any = properties;
-    console.log(path);
-    for (let i = 0; i < path.length; i++) {
-        const k = path[i];
-        let parent = k;
-
-        if (!k) return;
-        //console.log(k)
-        if (i === path.length - 1) {
-            const parsed = parseValue(value);
-
-            if (k === "grid") {
-                current[k] = { display: parsed }; // if the grid doesnt show what good are options
-            }
-            else if ((path.includes("plugins") || path.includes("scales")) && (k === "title" || k === "subtitle")) {
-                current[k] = { display: true, text: parsed }; // this is what the user should always write first
-            }
-            else if (k === "ticks") {
-                current[k] = {};
-            }
-            else if (path.includes("plugins") && (k === "legend")) {
-                current[k] = {display: parsed}; // same here. you first need to define the legend as on to give it a location
+        if (key !== undefined && value !== undefined) { //Type Narrowing
+            if (validPlotProperties.includes(key.split(".").pop() ?? "")) { // validPlotProperties doesnt include x or y or etc just title
+                    helperPlotProperties(defaultProperties,key,value);
             }
             else {
-                current[k] = parsed;
+                // Throw an error later
             }
+        }     
+    }
+    );
+    return defaultProperties;
+}
+
+function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string) {
+    const path = key.split("."); // scales.x.title -> [scales, x, title]
+    let current: any = properties;
+    
+    for (let i = 0; i < path.length; i++) {
+        const k = path[i];
+
+        if (!k) return;
+
+        if (i === path.length - 1) {
+            current[k] = parseValue(value)
         }
         else {
             current[k] ??= {};
@@ -161,27 +195,15 @@ function parseValue(value: string) {
     return value;
 }
 
-export function handleGlobalProperties(markdown: string[]) {
-    return markdown.filter(s => s.includes("global."));
+export function handleGlobalOptions(lines: string[]) {
+    return lines.filter(s => s.includes("global."));
 }
 
-export function getExprObjects(exprs: RawExpr[]): Equation[] {
-    // Create new array with all objects. Input must be a string array with all right side equations.
-    return exprs.map(({signature, expr}) => ({
-        expr: expr,
-        signature: signature,
-        x_limits: [-10,10,0.1],
-    }));
-    // Returns array containing all equation objects for the codeblock
-}
-
-export function getEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
+export function handleEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
     const exprs = []
-    const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
 
 
     for (let line of lines) {
-        if (!equationRegex.test(line)) continue;
 
         if (line.includes("=")) {
             // Equation found. Add it to array
@@ -194,28 +216,15 @@ export function getEquations(lines: string[]) { // getEquations is in charge of 
     return exprs; //Array of RawExpr objects
 }
 
-
-export function getVariable(expr: Equation) {
-    // Math parser is used to determine the variable in the expression.
-    // For cases where the expression is something like x^2 + G(x) + sin(x)
-    const node = math.parse(expr.expr);
-    const vars = new Set<string>();
-
-    node.traverse(function (node: any, path: string, parent: any){
-        if (node.isSymbolNode) {
-            if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
-                //console.log(`This cannot be a variable: ${node.name}`);
-                return
-            }
-            //console.log(`This is the node.name: ${node.name}`);
-            vars.add(node.name);
-        }
-    })
-    return [...vars];
-
+export function getEquations(exprs: RawExpr[]): Equation[] {
+    // Create new array with all objects. Input must be a string array with all right side equations.
+    return exprs.map(({signature, expr}) => ({
+        expr: expr,
+        signature: signature,
+        x_limits: [-10,10,0.1],
+    }));
+    // Returns array containing all equation objects for the codeblock
 }
-
-
 
 export function evaluateExpressions(equations: Equation[], parsedMd: LineProperties[], xRange: [number,number,number]) {
     const results = [];
@@ -250,3 +259,25 @@ export function evaluateExpressions(equations: Equation[], parsedMd: LinePropert
     }
     return results;
 }
+
+
+export function getVariable(expr: Equation) {
+    // Math parser is used to determine the variable in the expression.
+    // For cases where the expression is something like x^2 + G(x) + sin(x)
+    const node = math.parse(expr.expr);
+    const vars = new Set<string>();
+
+    node.traverse(function (node: any, path: string, parent: any){
+        if (node.isSymbolNode) {
+            if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
+                //console.log(`This cannot be a variable: ${node.name}`);
+                return
+            }
+            //console.log(`This is the node.name: ${node.name}`);
+            vars.add(node.name);
+        }
+    })
+    return [...vars];
+
+}
+
