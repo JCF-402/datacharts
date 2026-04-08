@@ -4,6 +4,8 @@
 import {create , all} from "mathjs";
 
 import type {ChartOptions} from "chart.js/auto";
+import { Notice } from "obsidian";
+import { e } from "mathjs";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
@@ -58,7 +60,10 @@ const validPlotProperties = [
     "legend.display",
     "legend.position",
     "title",
-    "subtitle"
+    "subtitle",
+    "x.grid.color",
+    "x.title.color",
+    "global.xrange"
 ]
 
 
@@ -113,28 +118,30 @@ export function handlePlotProperties(markdown: string[]) {
     return properties;
 
 }
-function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string,parent: string) {
-    const path = `${parent}.${key}`.split(".");
+function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string,top_level: string) {
+    const path = `${top_level}.${key}`.split(".");
     let current: any = properties;
-
+    console.log(path);
     for (let i = 0; i < path.length; i++) {
         const k = path[i];
-        if (!k) return;
+        let parent = k;
 
+        if (!k) return;
+        //console.log(k)
         if (i === path.length - 1) {
             const parsed = parseValue(value);
 
             if (k === "grid") {
-                current[k] = { display: parsed };
+                current[k] = { display: parsed }; // if the grid doesnt show what good are options
             }
             else if ((path.includes("plugins") || path.includes("scales")) && (k === "title" || k === "subtitle")) {
-                current[k] = { display: true, text: parsed };
+                current[k] = { display: true, text: parsed }; // this is what the user should always write first
             }
             else if (k === "ticks") {
                 current[k] = {};
             }
             else if (path.includes("plugins") && (k === "legend")) {
-                current[k] = {display: parsed};
+                current[k] = {display: parsed}; // same here. you first need to define the legend as on to give it a location
             }
             else {
                 current[k] = parsed;
@@ -143,7 +150,8 @@ function helperPlotProperties(properties: ChartOptions<"line">, key: string, val
         else {
             current[k] ??= {};
             current = current[k];
-    }}
+        }
+    }
 }
 
 function parseValue(value: string) {
@@ -151,6 +159,10 @@ function parseValue(value: string) {
     if (value === "false") return false;
     if (!isNaN(Number(value))) return Number(value);
     return value;
+}
+
+export function handleGlobalProperties(markdown: string[]) {
+    return markdown.filter(s => s.includes("global."));
 }
 
 export function getExprObjects(exprs: RawExpr[]): Equation[] {
@@ -205,15 +217,14 @@ export function getVariable(expr: Equation) {
 
 
 
-export function evaluateExpressions(equations: Equation[], parsedMd: LineProperties[]) {
+export function evaluateExpressions(equations: Equation[], parsedMd: LineProperties[], xRange: [number,number,number]) {
     const results = [];
-    let xRange: [number, number, number] = [-100,100,1];
 
     for (let equation of equations) {
         const limits = parsedMd.filter(l => l.signature === equation.signature && l.property === "xrange");
-
-        if (limits.length !== 0 && limits !== undefined && limits[0]?.value ) {
-            xRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
+        let localRange: [number, number, number] = xRange;
+        if (limits.length && limits[0]?.value){
+            localRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
         }
         const arr = [];
         // equation is an equation object
@@ -225,9 +236,11 @@ export function evaluateExpressions(equations: Equation[], parsedMd: LinePropert
 
         //console.log(vars);
         
-        for (let val = xRange[0]; val <= xRange[1]; val += xRange[2]) {
+        for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
             const scope = {[variable]:val}
             const y = compile.evaluate(scope);
+            if (!isFinite(y)) continue;
+
             arr.push({x:val,y});
         }
         results.push({

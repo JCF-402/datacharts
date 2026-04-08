@@ -10,11 +10,12 @@ type Dataset = {
     [key: string]: number | string | Data[]
 }
 
-Chart.defaults.scales.linear.min = 0;
-Chart.defaults.plugins.legend.display = true;
+//Chart.defaults.scales.linear.min = 0;
+Chart.defaults.plugins.legend.display = false;
 Chart.defaults.plugins.legend.position = "right";
 Chart.defaults.responsive = true;
 Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
 
 export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartOptions<"line"> ) {
     Chart.getChart(canvas)?.destroy(); // If a canvas exists. Destroy it. Generate fresh.
