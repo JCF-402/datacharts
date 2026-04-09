@@ -14,7 +14,7 @@ math.import({ // Created an alias so the user can write the more "normal" ln(x) 
 export type Equation = {
     expr: string,
     signature: string,
-    x_limits: [number, number, number],
+    x_limits?: [number, number, number],
     borderColor?: string,
     pointStyle?: string,
 }
@@ -39,35 +39,22 @@ export type LineProperties = {
     value: string
 }
 
-
+export type NestedEquations = {
+    expr: string 
+    signature: string 
+}
 type parsedText = {
     lineProperties: LineProperties[],
     chartOptions: ChartOptions<"line">,
     globalProperties: string[],
-    equations: Equation[]
-}
-
-type optionTransform = {
+    equations: Equation[],
+    nestedEquations: NestedEquations[];
 
 }
+
+
 const builtInConstants = ["e","E","pi","PI"];
-/*
-const validPlotProperties = [
-    "type",
-    "grid",
-    "min",
-    "max",
-    "ticks",
-    "display",
-    "position",
-    "title",
-    "subtitle",
-    "color",
-    "color",
-    "xrange",
-    "text",
-]
-*/
+
 const validPlotProperties = [
   "type",
   "min",
@@ -103,20 +90,37 @@ export function handleMarkdown(markdown: string): parsedText {
     const lines = markdown.split("\n");
     const propertyPattern = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
     const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
+    const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
 
     // something.property = value
     let lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
     let chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj."))); // Plot properties are "obj.property = value"
     let globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global.")));
     let equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
+    let nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
 
     const parsedText: parsedText = {
         lineProperties: lineProperties,
         chartOptions: chartOptions,
         globalProperties: globalOptions,
         equations: equations,
+        nestedEquations: nestedEquations
     }
     return parsedText;
+}
+
+export function handleNestedEquations(lines: string[]) {
+    const nestedEquations = []
+    for (let line of lines) {
+        if (line.includes(":")) {
+            // Equation found. Add it to array
+            const expr = line.split(":");
+            if (expr[1] && expr[0]) { // expr[1] is the right hand of the equation and expr[0] is the left hand side or the signature.
+                nestedEquations.push({signature: expr[0].trim(), expr:expr[1].trim()}); 
+            }
+        }
+    }
+    return nestedEquations; //Array of RawExpr objects
 }
 
 export function handleLineProperties(lines: string[], pattern: RegExp): LineProperties[] { 
@@ -201,8 +205,6 @@ export function handleGlobalOptions(lines: string[]) {
 
 export function handleEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
     const exprs = []
-
-
     for (let line of lines) {
 
         if (line.includes("=")) {
@@ -216,52 +218,134 @@ export function handleEquations(lines: string[]) { // getEquations is in charge 
     return exprs; //Array of RawExpr objects
 }
 
-export function getEquations(exprs: RawExpr[]): Equation[] {
+export function getEquations(exprs: RawExpr[]) {
     // Create new array with all objects. Input must be a string array with all right side equations.
     return exprs.map(({signature, expr}) => ({
         expr: expr,
         signature: signature,
-        x_limits: [-10,10,0.1],
     }));
     // Returns array containing all equation objects for the codeblock
 }
 
-export function evaluateExpressions(equations: Equation[], parsedMd: LineProperties[], xRange: [number,number,number]) {
+export function evaluateExpressions(parsedText: parsedText, xRange: [number,number,number]) {
     const results = [];
+    const nestInfo = [ // [[expresions],[signatures]]
+        parsedText.nestedEquations.map(n => n.expr),
+        parsedText.nestedEquations.map(n => n.signature)
+    ];
 
-    for (let equation of equations) {
-        const limits = parsedMd.filter(l => l.signature === equation.signature && l.property === "xrange");
+
+    for (let equation of parsedText.equations) {
+        // equation is an equation object
+
+
+        const mDataPoints = []; // array to be filled with equation data points
+
+        // Get Main Equation Variable --------------------------------------
+        const vars = getVariable(equation).filter((v) => !builtInConstants.includes(v)); 
+        // vars can include builtInConstants that need to be filtered out so they arent recognized as the variable.
+        const newVars = vars.flatMap(v => {
+            if (nestInfo[1]?.includes(v)) {
+                return [];
+            }
+            return [v];
+        })
+        // vars also filters out any variabales that are actually nested function signatures. Think if f(x) = G + x -> filters out G as long as G is declared as G: val
+
+
+        const variable =  newVars[0] ?? "x"; // !!!!!!!! Check this later 
+
+        // -----------------------------------------------------------------
+
+        // --------- Handle Nested Equations ------------------
+        const compiledNested: Record<string,any> = {};
+        const nestedVars: Record<string,string> = {};
+
+        for (let obj of parsedText.nestedEquations) {
+            const expr = obj.expr.trim();
+
+            if (isNumberString(expr)) {
+                compiledNested[obj.signature] = Number(expr);
+            } 
+            else if (expr.startsWith("[") && expr.endsWith("]")) {
+                compiledNested[obj.signature] = JSON.parse(expr);
+            } 
+            else {
+                compiledNested[obj.signature] = math.compile(expr);
+            }
+        }
+        
+        //--------------------------------------------------------
+
+        // -------------- This block sets local range ----------------------------------
+        const limits = parsedText.lineProperties.filter(l => l.signature === equation.signature && l.property === "xrange");
         let localRange: [number, number, number] = xRange;
         if (limits.length && limits[0]?.value){
             localRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
         }
-        const arr = [];
-        // equation is an equation object
+        // ------------------------------------------------------------------------------
 
-        const vars = getVariable(equation).filter((v) => !builtInConstants.includes(v)); // vars can include builtInConstants that need to be filtered out so they arent recognized as the variable.
-
-        const variable =  vars[0] ?? "x"; // !!!!!!!! Check this later 
+        
         const compile = math.compile(equation.expr); // Compile is apparently faster when using loops. It only needs to be generated once.
 
-        //console.log(vars);
         
         for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
-            const scope = {[variable]:val}
-            const y = compile.evaluate(scope);
-            if (!isFinite(y)) continue;
+            const scope: any = { [variable]: val };
 
-            arr.push({x:val,y});
+            for (let name in compiledNested) {
+                const v = compiledNested[name];
+
+                if (typeof v === "number") {
+                    scope[name] = v;
+                } 
+                else if (Array.isArray(v)) {
+                    continue; // handle separately later
+                } 
+                else {
+                    scope[name] = v.evaluate(scope); // uses current x
+                }
+            }
+
+            let y = compile.evaluate(scope);
+
+            // ---------------- Discontinuities ---------------------------------------
+            const prev = mDataPoints[mDataPoints.length - 1];
+            const prevY = prev?.y;
+
+            const currY = y;
+            let isDiscontinuity = false;
+
+            if (prevY !== undefined) {
+                const delta = Math.abs(currY - prevY); 
+                const slope = Math.abs((currY - prevY) / localRange[2]);
+                const scale = Math.max(Math.abs(prevY), 1); // avoids near-zero blowup
+                const relative = delta / scale;
+                if (!Number.isFinite(currY) || relative > 20 || slope > 1e5 ) { // relative and slope limits are manually optimized. Both are need for 
+                    // division by 0 discontinuities and equations that grow very quickly like e^x
+                    isDiscontinuity = true;
+                }
+            }
+
+            if (isDiscontinuity) {
+                mDataPoints.push({ x: val, y: NaN });
+                continue;
+            }
+            mDataPoints.push({x:val,y});
         }
+        // ------------------------------------------------------------------------------
+
+
+
         results.push({
         signature: equation.signature,
-        data: arr
+        data: mDataPoints
         });
     }
     return results;
 }
 
 
-export function getVariable(expr: Equation) {
+export function getVariable(expr: Equation | NestedEquations) {
     // Math parser is used to determine the variable in the expression.
     // For cases where the expression is something like x^2 + G(x) + sin(x)
     const node = math.parse(expr.expr);
@@ -270,9 +354,9 @@ export function getVariable(expr: Equation) {
     node.traverse(function (node: any, path: string, parent: any){
         if (node.isSymbolNode) {
             if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
-                //console.log(`This cannot be a variable: ${node.name}`);
                 return
             }
+
             //console.log(`This is the node.name: ${node.name}`);
             vars.add(node.name);
         }
@@ -281,3 +365,23 @@ export function getVariable(expr: Equation) {
 
 }
 
+function isNumberString(val: string): boolean {
+  return val.trim() !== "" && !isNaN(Number(val));
+}
+
+function parseExpr(expr: string) {
+  const val = expr.trim();
+
+  // number
+  if (val !== "" && !isNaN(Number(val))) {
+    return Number(val);
+  }
+
+  // array like [0.3,0.4]
+  if (val.startsWith("[") && val.endsWith("]")) {
+    return JSON.parse(val) as number[];
+  }
+
+  // otherwise math expression
+  return math.compile(val);
+}

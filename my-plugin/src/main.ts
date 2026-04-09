@@ -33,9 +33,10 @@ export default class PlotPlugin extends Plugin {
 				}
 			}
 
-			const data = evaluateExpressions(parsedText.equations,parsedText.lineProperties,globalXRange);
+			const data = evaluateExpressions(parsedText,globalXRange);
 
 			console.log(JSON.stringify(parsedText.chartOptions, null, 2));
+			console.log(data)
 
 			createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions);
 			
