@@ -10,17 +10,10 @@ type Dataset = {
     [key: string]: number | string | Data[]
 }
 
-//Chart.defaults.scales.linear.min = 0;
-Chart.defaults.plugins.legend.display = false;
-Chart.defaults.plugins.legend.position = "right";
-Chart.defaults.responsive = true;
-Chart.defaults.maintainAspectRatio = false;
-Chart.defaults.plugins.legend.labels.usePointStyle = true;
-Chart.defaults.plugins.title.display = true;
 
 
 export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartOptions<"line"> ) {
-    Chart.getChart(canvas)?.destroy(); // If a canvas exists. Destroy it. Generate fresh.
+
 
     // Modifies the background color of the plot to adjust for whatever theme is being used. Look at styles.css
     const parent = canvas.parentElement;
@@ -32,27 +25,9 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
     parent.replaceChild(container, canvas);
     container.appendChild(canvas);
     }
-    
-    const datasets = data.map(eq => {
-        const dataset: Dataset = {
-            label: eq.signature,
-            data: eq.data.map((p: Data) => ({ x: p.x, y: p.y})),
-            borderWidth: 2,
-            pointStyle: "circle",
-            pointRadius: 1
-            
-        };
-        const props = parsedMd.filter(p => p.signature === eq.signature); // Create array with signatures that match eq signature
+    const datasets = buildDatasets(data,parsedMd)
 
-        props.forEach(p => { // Traverse array of filtered properties. And add the property 
-            //console.log(`${p.property} = ${p.value}`);
-            dataset[p.property] = p.value; 
-        });
-        return dataset
-    });
-    //console.log(datasets);
-
-    new Chart(canvas, {
+    return new Chart(canvas, {
     type: "line",
     data: {
         datasets: datasets},
@@ -61,4 +36,23 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
         ...plotProperties,
     }
     });
+}
+
+export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
+	return data.map(eq => {
+		const dataset: Dataset = {
+			label: eq.signature,
+			data: eq.data.map((p: Data) => ({ x: p.x, y: p.y })),
+			borderWidth: 2,
+			pointStyle: "circle",
+			pointRadius: 1
+		};
+
+		const props = parsedMd.filter(p => p.signature === eq.signature);
+		props.forEach(p => {
+			dataset[p.property] = p.value;
+		});
+
+		return dataset;
+	});
 }

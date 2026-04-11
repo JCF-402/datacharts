@@ -1,14 +1,18 @@
 
 import {create , all} from "mathjs";
-
 import type {ChartOptions} from "chart.js/auto";
-import { Notice } from "obsidian";
+import { Notice, App, TFile} from "obsidian";
 import { e } from "mathjs";
+import { boolean } from "mathjs";
+import { re } from "mathjs";
+import { getApp } from "appContext";
+import { exp } from "mathjs";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
     ln: math.log,
 });
+
 
 
 export type Equation = {
@@ -29,8 +33,8 @@ export type PlotData = {
 }
 
 export type Data = {
-    x: number,
-    y: number
+    x: number | string,
+    y: number | string
 }
 
 export type LineProperties = {
@@ -43,12 +47,15 @@ export type NestedEquations = {
     expr: string 
     signature: string 
 }
-type parsedText = {
+
+export type parsedText = {
     lineProperties: LineProperties[],
     chartOptions: ChartOptions<"line">,
     globalProperties: string[],
     equations: Equation[],
-    nestedEquations: NestedEquations[];
+    nestedEquations: NestedEquations[],
+    manualData: PlotData[]
+    tableData: PlotData[]
 
 }
 
@@ -86,28 +93,108 @@ const validPlotProperties = [
 
 
 
-export function handleMarkdown(markdown: string): parsedText {
-    const lines = markdown.split("\n");
+export async function handleMarkdown(markdown: string): Promise<parsedText> {
+    const lines = markdown.split("\n").filter(s => s !== "");
     const propertyPattern = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
     const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
     const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
+    const manualDataRegex = /^(\w+)(?:\(([^)]+)\))?\s*::\s*(.+)$/;
 
     // something.property = value
-    let lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
-    let chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj."))); // Plot properties are "obj.property = value"
-    let globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global.")));
-    let equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
-    let nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
+    const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
+    const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj."))); // Plot properties are "obj.property = value"
+    const globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global."))); // Global properties are global.
+    const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
+    const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
+    const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
+    const tableData = await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::")));
 
     const parsedText: parsedText = {
         lineProperties: lineProperties,
         chartOptions: chartOptions,
         globalProperties: globalOptions,
         equations: equations,
-        nestedEquations: nestedEquations
+        nestedEquations: nestedEquations,
+        manualData: manualData,
+        tableData: tableData
     }
     return parsedText;
 }
+
+
+function handleManualData(lines: string[]) {
+    const datasets: RawExpr[] = [];
+    let current: RawExpr | undefined = undefined;
+
+    for (let raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+
+        if (line.includes("::")) {
+            const [signature, expr] = line.split("::").map(s => s.trim());
+
+            current = {expr: expr ?? "", signature: signature ?? ""};
+            datasets.push(current);
+        }
+        else if (current) {
+            current.expr += line;
+        }
+    }
+    return datasets; 
+}
+
+function getData(datasets: RawExpr[]) {
+    const results = [];
+
+    const parentObjects = datasets.filter(s => s.signature.startsWith("data")); // Only gets RawExpr objects that have data in the string.
+    for (let data of parentObjects) {
+        const mDataPoints = [];
+        if (data.signature.trim().endsWith(")")) {
+            let name = data.signature.replace("data","").replace("(","").replace(")","");
+            data.signature = name;
+        }
+        const vars = getVariable(data); // Gets the variables for the current data object so data(name) = [x,y] gets x and y as variables.
+        const objData = [];
+        for (let v of datasets) {
+
+            if (vars.includes(v.signature)) {
+                if (v.signature.trim() === vars[0]) {
+                // v is currently something like x :: [0.3,0.4,0.5] but can also be strings ["Monday","Tuesday"]
+                    try {
+                        objData.push(JSON.parse(v.expr.trim())); 
+
+                    } catch {
+                        const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
+                        objData.push(JSON.parse(safe));
+                        //new Notice("Mixed number/string axis values is not currently supported",5000);
+                    }
+                } 
+                else if (v.signature.trim() === vars[1]) {
+                    try {
+                        objData.push(JSON.parse(v.expr.trim())); 
+
+                    } catch {
+                        const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
+                        objData.push(JSON.parse(safe));
+                        //new Notice("Mixed number/string axis values is not currently supported",5000);
+                    }
+                }
+            }
+        }
+        if (objData[0].length !== objData[1].length) new Notice(`Data arrays for ${data.signature} are not the same length`,5000);
+
+        for (let i = 0; i < objData[0].length; i ++) {
+            const x = objData[0][i];
+            const y = objData[1][i];
+            mDataPoints.push({x: x, y: y});
+        }
+        results.push({signature: data.signature, data: mDataPoints});
+    }
+    return results;
+}
+
+
+
 
 export function handleNestedEquations(lines: string[]) {
     const nestedEquations = []
@@ -150,21 +237,33 @@ export function handlePlotProperties(lines: string[]) {
         }
     },
     plugins: {
+        legend: {
+            display: true,
+            position: "right",
+            labels: {
+                usePointStyle: true,
+            }
+        },
+
         title: {
             display: true,
         }
-    }
+    },
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false
     };
-
     lines.forEach(prop => {
         const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["obj.scales.x.type","linear"]
         const key = rawKey?.replace("obj.",""); // obj.x.title -> scales.x.title
-
+        
         if (key !== undefined && value !== undefined) { //Type Narrowing
-            if (validPlotProperties.includes(key.split(".").pop() ?? "")) { // validPlotProperties doesnt include x or y or etc just title
+            const last = key.split(".").pop() ?? ""
+            if (validPlotProperties.includes(last)) { // validPlotProperties doesnt include x or y or etc just title
                     helperPlotProperties(defaultProperties,key,value);
             }
             else {
+                new Notice(`Oops ${key} is not a valid property.`, 5000);
                 // Throw an error later
             }
         }     
@@ -235,7 +334,7 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
     ];
 
 
-    for (let equation of parsedText.equations) {
+    equationLoop: for (let equation of parsedText.equations) {
         // equation is an equation object
 
 
@@ -259,7 +358,6 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
 
         // --------- Handle Nested Equations ------------------
         const compiledNested: Record<string,any> = {};
-        const nestedVars: Record<string,string> = {};
 
         for (let obj of parsedText.nestedEquations) {
             const expr = obj.expr.trim();
@@ -293,61 +391,55 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
             const scope: any = { [variable]: val };
 
             for (let name in compiledNested) {
-                const v = compiledNested[name];
+                const v = compiledNested[name]; // grabs the expression with "name" signature
 
                 if (typeof v === "number") {
-                    scope[name] = v;
+                    scope[name] = v; // if the expression is a scalar (constant). Simply assign it to the scope with the signature as its variable. 
                 } 
-                else if (Array.isArray(v)) {
-                    continue; // handle separately later
+                else if (Array.isArray(v)) { // if the expression is a list of values the current equation needs to be evaluated with the current val
+                    // at each value in the array. 
+                    // So if f(x) = x^2 * D -> D: [0.3,0.4,0.5]. We get three plots, one for each D value. 
+                    // ONLY the equation that contains the nested function needs to be plotted. Other functions work as normal.
+                    if (   vars.includes(name)     ) { // Checks if the signature that matches the list is a variable of the current equation.
+                        // Essentially evaluateExpressions needs to be called for each one. But evaluateExpressions has too much logic not need at this point.
+                        // I also need to stop evaluating this equation entirely. 
+                        // Ill call the function that evaluates the expression with a value. That function returns an array with all datasets. Then I push that into the datasets array. Then break to the next equation
+                         results.push(...handleNestedArray(equation,variable,localRange,v,name));
+                         continue equationLoop;
+                    } 
                 } 
                 else {
-                    scope[name] = v.evaluate(scope); // uses current x
+                    scope[name] = v.evaluate(scope); // if the expression is neither a scalar nor an array then its an expression. evaluate it with normal the current val
                 }
             }
 
             let y = compile.evaluate(scope);
 
-            // ---------------- Discontinuities ---------------------------------------
-            const prev = mDataPoints[mDataPoints.length - 1];
-            const prevY = prev?.y;
+            const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
 
-            const currY = y;
-            let isDiscontinuity = false;
-
-            if (prevY !== undefined) {
-                const delta = Math.abs(currY - prevY); 
-                const slope = Math.abs((currY - prevY) / localRange[2]);
-                const scale = Math.max(Math.abs(prevY), 1); // avoids near-zero blowup
-                const relative = delta / scale;
-                if (!Number.isFinite(currY) || relative > 20 || slope > 1e5 ) { // relative and slope limits are manually optimized. Both are need for 
-                    // division by 0 discontinuities and equations that grow very quickly like e^x
-                    isDiscontinuity = true;
-                }
-            }
-
-            if (isDiscontinuity) {
+            if (isDiscontinuity) { 
                 mDataPoints.push({ x: val, y: NaN });
                 continue;
             }
             mDataPoints.push({x:val,y});
         }
         // ------------------------------------------------------------------------------
-
-
-
-        results.push({
-        signature: equation.signature,
-        data: mDataPoints
-        });
+        results.push({signature: equation.signature, data: mDataPoints});
     }
     return results;
 }
 
 
-export function getVariable(expr: Equation | NestedEquations) {
+export function getVariable(expr: Equation | NestedEquations | RawExpr) {
     // Math parser is used to determine the variable in the expression.
     // For cases where the expression is something like x^2 + G(x) + sin(x)
+    if (expr.signature.includes("data")) {
+        return expr.expr
+            .replace(/[\[\]]/g, "")
+            .split(",")
+            .map(s => s.trim());
+    }
+
     const node = math.parse(expr.expr);
     const vars = new Set<string>();
 
@@ -369,19 +461,122 @@ function isNumberString(val: string): boolean {
   return val.trim() !== "" && !isNaN(Number(val));
 }
 
-function parseExpr(expr: string) {
-  const val = expr.trim();
+function handleNestedArray(eq: Equation,variable: string, localRange: [number, number, number], v: number[], name: string) {
+    const expr = math.compile(eq.expr);
+    const results: PlotData[] = [];
 
-  // number
-  if (val !== "" && !isNaN(Number(val))) {
-    return Number(val);
-  }
+    for (let i of v) {
+        const mDataPoints: Data[] = []
+        for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
+            const scope = {
+                [variable]: val,
+                [name]: i
+            }
+            let y = expr.evaluate(scope);
+            const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
+            
+            if (isDiscontinuity) { 
+                mDataPoints.push({ x: val, y: NaN });
+                continue;
+            }
+            mDataPoints.push({x:val,y});
+        }
+    results.push({signature: `${name}=${i}`, data: mDataPoints});
+    }
+    return results;
+}
 
-  // array like [0.3,0.4]
-  if (val.startsWith("[") && val.endsWith("]")) {
-    return JSON.parse(val) as number[];
-  }
+function handleDiscontinuities(mDataPoints: Data[], localRange: [number, number, number], y: number) {
+                // ---------------- Discontinuities ---------------------------------------
+            const prev = mDataPoints[mDataPoints.length - 1];
+            const prevY = prev?.y;
 
-  // otherwise math expression
-  return math.compile(val);
+            const currY = y;
+            let isDiscontinuity = false;
+
+            if (prevY !== undefined) {
+                if (typeof prevY === "string" || typeof currY === "string") {
+                    return;
+                }
+                const delta = Math.abs(currY - prevY); 
+                const slope = Math.abs((currY - prevY) / localRange[2]);
+                const scale = Math.max(Math.abs(prevY), 1); // avoids near-zero blowup
+                const relative = delta / scale;
+                if (!Number.isFinite(currY) || relative > 20 || slope > 1e5 ) { // relative and slope limits are manually optimized. Both are need for 
+                    // division by 0 discontinuities and equations that grow very quickly like e^x
+                    isDiscontinuity = true;
+                }
+                
+            }
+            return isDiscontinuity;
+}
+
+export async function handleTableData(lines: string[]) {
+    const app = getApp();
+    const results = [];
+	for (let line of lines) {
+
+		let [signature, expr] = line.split("::"); // [source(name), table from "path"]
+
+		if (!signature || !expr) continue;
+
+		const tableTitle =  signature.replace("source","").replace("(","").replace(")","");
+    	signature = tableTitle;
+		if (expr.includes("table")) {
+
+			const path = expr.replace("table","").replace("from","").trim() + ".md";
+            const file = app.vault.getAbstractFileByPath(path);
+            if (file instanceof TFile) {
+
+                const markdown = await app.vault.cachedRead(file);
+                results.push(extractTable(markdown, signature));
+            }
+
+
+		}
+
+		
+
+	}
+    return results;
+}
+
+
+function extractTable(markdown: string, signature: string) {
+    const lines = markdown.split("\n");
+
+    const data: Data[] = [];
+    let tableStart = true;
+    let currentRow = 1;
+    for (let line of lines) {
+        if (line.startsWith("|") && line.includes(signature) && tableStart) { // Right table found
+            tableStart = false; // Registers start of table only once per search
+            continue;
+        }
+        if (!tableStart) {
+            if (!line.trim().startsWith("|")) break;
+            currentRow ++;
+
+            if (currentRow === 2) {
+                continue; // Lines ------- 
+            }
+            if (currentRow === 3) {
+                // These are headers (names for variables) (Might do something else later)
+                continue;
+            }
+            if (line.startsWith("|") && currentRow > 3) {
+                let arr = line.split("|").map(s => s.trim()).filter(s => s !== "");
+
+                if (arr.length < 2) continue;
+                const x = isNaN(Number(arr[0])) ? arr[0] : Number(arr[0]);
+                const y = isNaN(Number(arr[1])) ? arr[1] : Number(arr[1]);
+                
+                data.push({x: x ?? "", y: y ?? ""});
+                
+            }
+
+
+    }}
+
+    return { signature: signature, data: data };
 }
