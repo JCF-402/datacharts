@@ -7,7 +7,7 @@ import { boolean } from "mathjs";
 import { re } from "mathjs";
 import { getApp } from "appContext";
 import { exp } from "mathjs";
-
+import { customNotice } from "main";
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
     ln: math.log,
@@ -95,7 +95,7 @@ const validPlotProperties = [
 
 export async function handleMarkdown(markdown: string): Promise<parsedText> {
     const lines = markdown.split("\n").filter(s => s !== "");
-    const propertyPattern = /^\s*([a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
+    const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
     const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
     const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
     const manualDataRegex = /^(\w+)(?:\(([^)]+)\))?\s*::\s*(.+)$/;
@@ -213,6 +213,7 @@ export function handleNestedEquations(lines: string[]) {
 export function handleLineProperties(lines: string[], pattern: RegExp): LineProperties[] { 
 
     const lineProperties = lines.flatMap(s => {
+ 
         const match = s.match(pattern);
         if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return [];
         const signature = match[1];
@@ -544,10 +545,34 @@ export async function handleTableData(lines: string[]) {
 
 function extractTable(markdown: string, signature: string) {
     const lines = markdown.split("\n");
-
     const data: Data[] = [];
     let tableStart = true;
     let currentRow = 1;
+
+    let col1: string | number | undefined = undefined;
+    let col2: string | number | undefined = undefined;
+    let col1Index: number | undefined = undefined;
+    let col2Index: number | undefined = undefined;
+
+    // Right here the signature can still be something like name[column1,column2]
+    if (signature.endsWith("]")) {
+        const nameAndColumns = signature.split("["); // [name, [column1,column2] ]
+        if (nameAndColumns[0] === undefined || nameAndColumns[1] === undefined) {
+            signature = "name-error";
+            // Throw notice here better. 
+        } else {
+        signature = nameAndColumns[0]
+        const columns = nameAndColumns[1].replace("]","").split(",");
+        col1 = isNaN(Number(columns[0])) ? columns[0] : Number(columns[0]);
+        col2 = isNaN(Number(columns[1])) ? columns[1] : Number(columns[1]);
+        
+        }
+        
+        if (typeof col1 === "number") col1Index = col1;
+        if (typeof col2 === "number") col2Index = col2;
+
+    }
+
     for (let line of lines) {
         if (line.startsWith("|") && line.includes(signature) && tableStart) { // Right table found
             tableStart = false; // Registers start of table only once per search
@@ -561,17 +586,45 @@ function extractTable(markdown: string, signature: string) {
                 continue; // Lines ------- 
             }
             if (currentRow === 3) {
-                // These are headers (names for variables) (Might do something else later)
-                continue;
+                // These are headers (names for variables)
+                // Check if there any headers.
+                const headers = line.split("|").map(s => s.trim()).filter(s => s !== ""); // Split the line by |  and eliminate any whitespaces
+                
+                if (headers.length === 0) {
+                    continue;
+                }
+                if (col1 !== undefined && typeof col1 === "string") {
+                    // Column 1 is a string
+                    if (!headers.includes(col1)) {
+                        new Notice(`${col1} does not match any ${signature} table header`,5000);
+                        continue;
+                    }
+                    // If it does match a known header. Find the index it matches 
+                    col1Index = headers.indexOf(col1);
+                }
+                if (col2 !== undefined && typeof col2 === "string") {
+                    if (!headers.includes(col2)) {
+                        customNotice(`${col2} does not match any ${signature} table header`,"notice-warning", 5000);
+                        continue;
+                    }
+                    col2Index = headers.indexOf(col2);
+                }
+
             }
             if (line.startsWith("|") && currentRow > 3) {
                 let arr = line.split("|").map(s => s.trim()).filter(s => s !== "");
-
                 if (arr.length < 2) continue;
-                const x = isNaN(Number(arr[0])) ? arr[0] : Number(arr[0]);
-                const y = isNaN(Number(arr[1])) ? arr[1] : Number(arr[1]);
+                if (col1Index === undefined || col2Index === undefined) { // Default to using the first two columns
+                    const x = isNaN(Number(arr[0])) ? arr[0] : Number(arr[0]);
+                    const y = isNaN(Number(arr[1])) ? arr[1] : Number(arr[1]);
+                    data.push({x: x ?? "", y: y ?? ""});
+                } else  {
+                    const x = arr[col1Index];
+                    const y = arr[col2Index];
+                    data.push({x: x ?? "", y: y ?? ""});
+                }
                 
-                data.push({x: x ?? "", y: y ?? ""});
+                
                 
             }
 
@@ -580,3 +633,5 @@ function extractTable(markdown: string, signature: string) {
 
     return { signature: signature, data: data };
 }
+
+

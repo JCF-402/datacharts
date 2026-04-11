@@ -5,3 +5,8 @@
   border-radius: 6px;
   padding: 8px;
 }
+
+.notice-success { background: #1d4d2b; color: white; }
+.notice-error { background: #5a1a1a; color: white; }
+.notice-info { background: #1d3557; color: white; }
+.notice-warning {background: #d98c1f; color: white;}
