@@ -7,6 +7,10 @@ import { Notice, App, TFile} from "obsidian";
 import { getApp } from "appContext";
 
 import { customNotice } from "main";
+import { validLineProperties } from "graphs";
+import { min } from "mathjs";
+import { string } from "mathjs";
+import { isArray } from "chart.js/dist/helpers/helpers.core";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
@@ -91,6 +95,14 @@ export const validPlotProperties = [
   "hidden"
 ];
 
+const validRoots = [
+    "plugins",
+    "scales",
+    "elements",
+    "interaction",
+    "animation"
+]
+
 
 
 export async function handleMarkdown(markdown: string, defaultProperties: ChartOptions<"line">): Promise<parsedText> {
@@ -108,7 +120,6 @@ export async function handleMarkdown(markdown: string, defaultProperties: ChartO
     const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
     const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
     const tableData = await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::")));
-
     const parsedText: parsedText = {
         lineProperties: lineProperties,
         chartOptions: chartOptions,
@@ -154,30 +165,28 @@ function getData(datasets: RawExpr[]) {
             data.signature = name;
         }
         const vars = getVariable(data); // Gets the variables for the current data object so data(name) = [x,y] gets x and y as variables.
-        const objData: string[] = []; // Stores data about the current data:: object
+        const objData: (string[] | number[])[] = []; // Stores data about the current data:: object
         for (let v of datasets) {
 
             if (vars.includes(v.signature)) {
                 if (v.signature.trim() === vars[0]) {
                 // v is currently something like x :: [0.3,0.4,0.5] but can also be strings ["Monday","Tuesday"]
-                    try {
-                        objData.push(JSON.parse(v.expr.trim())); // Try and parse the expression with json. If fail alternate to replace
-                        // Elint gives error for json parse since it takes any but it shouldnt be an issue. It has catch as fallback.
-                        // Same below
+                        try {
+                            objData.push(JSON.parse(v.expr.trim()));
+                        } catch {
+                            const safe = (v.expr.replace("[","").replace("]","").split(",").map((s: string) => s.trim()));
+                            objData.push(safe);
 
-                    } catch {
-                        const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
-                        objData.push(JSON.parse(safe));
-                    }
+                        }
                 } 
                 else if (v.signature.trim() === vars[1]) {
-                    try {
-                        objData.push(JSON.parse(v.expr.trim())); 
+                        try {
+                          objData.push(JSON.parse(v.expr.trim()));
+                        } catch {
+                            const safe = (v.expr.replace("[","").replace("]","").split(",").map((s: string) => s.trim()));
+                            objData.push(safe)
 
-                    } catch {
-                        const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
-                        objData.push(JSON.parse(safe));
-                    }
+                        }
                 }
             }
         }
@@ -185,11 +194,10 @@ function getData(datasets: RawExpr[]) {
         // ObjData contains the x and y values that belong to the current data:: object. Where the current data:: [x,y]
         // If the expressions for x or y couldnt resolver or where never given it would be an error. I wont stop parsing so
         if (objData[0] === undefined || objData[1] === undefined) {
-            customNotice(`Error: could not resolve data for ${data.signature}. Check inputs.`,"notic-error");
+            customNotice(`Error: could not resolve data for ${data.signature}. Check inputs.`,"notic-error",5000);
             continue;
         }
-        
-        if (objData[0].length !== objData[1].length) new Notice(`Data arrays for ${data.signature} are not the same length`,5000);
+        if (objData[0].length !== objData[1].length) customNotice(`Data arrays for ${data.signature} are not the same length`,"notice-error",5000);
 
         for (let i = 0; i < objData[0].length; i ++) {
             const x = objData[0][i]; // Can be undefined because I didnt check for obj[0][i] specifically. 
@@ -202,9 +210,6 @@ function getData(datasets: RawExpr[]) {
     }
     return results;
 }
-
-
-
 
 export function handleNestedEquations(lines: string[]) {
     const nestedEquations = []
@@ -249,7 +254,7 @@ export function handlePlotProperties(lines: string[], defaultProperties: ChartOp
             }
             else {
                 // Evaluate using fuzzy matching later
-                new Notice(`Oops ${key} is not a valid property.`, 5000);
+                findPossibleProperty(key,validPlotProperties,"PlotProperties",validRoots);
                 // Throw an error later
             }
         }     
@@ -339,7 +344,7 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
         // vars also filters out any variabales that are actually nested function signatures. Think if f(x) = G + x -> filters out G as long as G is declared as G: val
 
         const variable =  newVars[0]
-        if (variable === undefined) continue;
+        const isConstant = (variable === undefined);
 
         // -----------------------------------------------------------------
 
@@ -375,8 +380,10 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
 
         
         for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
-            const scope: Record<string, string | number> = { [variable]: val };
-
+            const scope: Record<string, string | number> = { };
+            if (!isConstant) {
+                scope[variable] = val;
+            }
             for (let name in compiledNested) {
                 const v = compiledNested[name]; // grabs the expression with "name" signature
 
@@ -396,6 +403,7 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                         // I also need to stop evaluating this equation entirely. 
                         // Ill call the function that evaluates the expression with a value. That function returns an array with all datasets. Then I push that into the datasets array. 
                         // Then continue to the next equation
+                        if (variable === undefined) continue equationLoop;
 
                          results.push(...handleNestedArray(equation,variable,localRange,v,name));
                          continue equationLoop;
@@ -510,7 +518,7 @@ export async function handleTableData(lines: string[]) {
 
 		if (!signature || !expr) continue;
 
-		const tableTitle =  signature.replace("source","").replace("(","").replace(")","");
+		const tableTitle =  signature.replace("source","").replace("(","").replace(")","").trim();
     	signature = tableTitle;
 		if (expr.includes("table")) {
 
@@ -585,7 +593,7 @@ function extractTable(markdown: string, signature: string) {
                 if (col1 !== undefined && typeof col1 === "string") {
                     // Column 1 is a string
                     if (!headers.includes(col1)) {
-                        new Notice(`${col1} does not match any ${signature} table header`,5000);
+                        customNotice(`${col1} does not match any ${signature} table header`,"notice-warning",5000);
                         continue;
                     }
                     // If it does match a known header. Find the index it matches 
@@ -623,4 +631,110 @@ function extractTable(markdown: string, signature: string) {
     return { signature: signature, data: data };
 }
 
+export function findPossibleProperty(key: string, validProps: string[], flag: string, validRoots?: string[], ) {
 
+    switch (flag) {
+        case "LineProperty":
+                let bestMatch = "";
+                let bestDist = Infinity;
+            for (let prop of validLineProperties) {
+                const dist = levD(key, prop);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestMatch = prop;
+                }
+            }
+                if (bestDist <= 9) {
+                    customNotice(`${key} is not a valid line property. Did you mean ${bestMatch}?`, "notice-info",5000);
+                    return;
+                } else if (bestDist > 9) {
+                    customNotice(`${key} not recognized.`, "notice-warning",5000);
+                    return
+                }
+
+            
+        case "PlotProperty":
+                bestMatch = "";
+                bestDist = Infinity;
+            const keyPath = key.split("."); 
+            if (keyPath[0] === undefined) return;
+            if (validRoots === undefined) return;
+            if (!validRoots.includes(keyPath[0])) {
+                for (let root of validRoots){
+                    const dist = levD(keyPath[0],root);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestMatch = root;
+                    }
+
+                }
+                if (bestDist <= 9) {
+                    customNotice(`${keyPath[0]} is not a valid chart options root. Did you mean ${bestMatch}?`,"notice-info",5000);
+                    return;
+                }
+                else if (bestDist > 9) {
+                    customNotice(`${keyPath[0]} is not a recognized chart root.`,"notice-error",5000);
+                    return;
+                }
+            }
+
+            for (let p = 1; p < keyPath.length; p++) {
+                const k = keyPath[p];
+                if (k === undefined) continue;
+
+                if (!validPlotProperties.includes(k)) {
+                    for (let prop of validPlotProperties) {
+                        const dist = levD(k,prop);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestMatch = prop;
+                        }
+                    }
+                    if (bestDist <= 9) {
+                         customNotice(`${k} is not a valid chart option. Did you mean ${bestMatch}?`,"notice-info",5000);
+                         return;
+                    }
+                    customNotice(`${k} is not a recognized chart option.`,"notice-error",5000);
+                    return;
+
+                }
+            }
+
+
+            
+    }
+}
+
+function levD(a: string, b: string ): number {
+
+    const rows = a.length + 1;
+    const cols = b.length + 1;
+
+    const dist: number[][] = Array.from({length: rows}, () => Array(cols).fill(0));
+
+    for (let i = 1; i < rows; i++) {
+
+        dist[i]![0] = i;
+    }
+
+    for (let i = 1; i < cols; i++) {
+        dist[0]![i] = i;
+    }
+
+    for (let col = 1; col < cols; col++) {
+        for (let row = 1; row < rows; row++) {
+            let cost = 0;
+            if (a[row-1] === b[col-1]) {
+                cost = 0;
+            }
+            else {
+                cost = 1;
+            }
+            dist[row]![col] = Math.min(dist[row-1]![col]! + 1, dist[row]![col-1]! + 1, dist[row-1]![col-1]! + cost);
+        }
+    }
+
+
+    return dist[rows-1]![cols-1]!;
+
+}

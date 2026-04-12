@@ -11,6 +11,7 @@ import { ChartConfiguration } from "chart.js/auto";
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
+	private charts = new Set<any>();
 
 	async onload() { // Loads plugin
 		await this.loadSettings();
@@ -28,12 +29,10 @@ export default class PlotPlugin extends Plugin {
 
 			let globalXRange = checkGlobalRange(cachedParsedText) // Gets the global range for the current codeblock. This is because the plot might have a global definition of the xrange.
 			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalXRange) ? globalXRange : [-10,10,0.1]); //Evaluates all expressions, if any, inside the codeblock.
-			
+
 			// There are a few reasons for optimization. But it started with wanting the plot to update whenever the source:: object it references (the table) is updated.
 
-			let debounceTimer: number | undefined = undefined; // debounce timer for optimization. Minimizing delay intent.
 			let chartInstance: any = undefined; 
-			let isUpdating = false;
 
 			const renderPlot = async () => { 
 				const parsedText = cachedParsedText; 
@@ -43,12 +42,16 @@ export default class PlotPlugin extends Plugin {
 					...parsedText.manualData, // Manual data is updated per codeblock modification but I expect it will be small amounts of data. (Or your crazy tbh)
 					...parsedText.tableData // Will always be the latest table data stored in the cache.
 					]
-
+					/*
 					// Detect scale type depending on type of data. For example ChartJs works best as category for an x axis like 
 					// x = [January, February, etc]
 					if (parsedText.chartOptions.scales !== undefined && parsedText.chartOptions.scales.x !== undefined) {
-							parsedText.chartOptions.scales.x.type = declareScalesType(data) ?? "linear";
+							parsedText.chartOptions.scales.x.type = declareScalesType(data,"x") ?? "linear";
 						}
+					if (parsedText.chartOptions.scales !== undefined && parsedText.chartOptions.scales.y !== undefined) {
+							parsedText.chartOptions.scales.y.type = declareScalesType(data,"y") ?? "linear";
+						}
+							*/
 
 
 					//console.log(JSON.stringify(parsedText.chartOptions, null, 2));
@@ -70,6 +73,8 @@ export default class PlotPlugin extends Plugin {
 					canvas.style.height = `${this.settings.canvasHeight}px`;
 
 					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions); // Chart is created. 
+					this.charts.add(chartInstance);
+
 				} else { // If the chart does exist only update it when a table it references is updated.
 					chartInstance.data.datasets = buildDatasets(data,parsedText.lineProperties); 
 					chartInstance.update();
@@ -82,34 +87,22 @@ export default class PlotPlugin extends Plugin {
 				this.app.vault.on("modify", async (file) => { // where the event is a modification of the file
 					if (!sourcePaths.includes(file.path)) return; // Only goes through if the file that is modified belongs to the codeblocks sourcepaths
 
-					if (debounceTimer) clearTimeout(debounceTimer);
-					
-					debounceTimer = window.setTimeout(async () => { // Give the window a timer before updating
-						if (isUpdating) return; 
 
-						isUpdating = true; 
-						try {
-							// So the file that was modified is part of the source for the current codeblocks data. We need to updated the table data.
+						// So the file that was modified is part of the source for the current codeblocks data. We need to updated the table data.
 							// It hands the new markdown text to handleTableData which parses it for all tables.	
-						const updateTableData = await handleTableData(source.split("\n").filter(s => s.includes("source(") && s.includes("::")));
+					const updateTableData = await handleTableData(source.split("\n").filter(s => s.includes("source(") && s.includes("::")));
 
 						
-						cachedParsedText.tableData = updateTableData; // Updates stored tableData
+					cachedParsedText.tableData = updateTableData; // Updates stored tableData
 
-						await renderPlot(); // Calls renderPlot(). Because the parsedText is always dependant on the cached information, previous data isnt lost.
-
-						} finally {
-							isUpdating = false;
-						}
-					}, 400);
-					
+					await renderPlot(); // Calls renderPlot(). Because the parsedText is always dependant on the cached information, previous data isnt lost.
 
 				})
 			);
 		}
 	);
 
-		this.registerMarkdownCodeBlockProcessor("plot-data", (source: string, el: HTMLElement) => {
+		this.registerMarkdownCodeBlockProcessor("bases", (source: string, el: HTMLElement) => { // Later feature
 			// This is for some other time
 			const canvas = document.createElement("canvas"); 
 
@@ -122,6 +115,14 @@ export default class PlotPlugin extends Plugin {
 			return;
 		})
 	}
+
+	onunload(): void {
+		this.charts.forEach(chart => {
+			try {chart.destroy();} catch {}
+		});
+		this.charts.clear();
+	}
+
 	async loadSettings() {
 		this.settings = Object.assign(
 			{},
@@ -167,6 +168,22 @@ export default class PlotPlugin extends Plugin {
 					}
 				}
 			},
+			zoom: {
+				
+				pan: {
+					enabled: this.settings.zoomStatus ? false : true,
+					mode: "xy"
+				},
+				zoom: {
+					wheel: {
+						enabled: this.settings.zoomStatus ? false : true,
+					},
+					pinch: {
+						enabled: this.settings.zoomStatus ? false : true,
+					},
+					mode: "xy"
+				}
+			},
 			title: {
 				display: this.settings.titleStatus,
 				font: {
@@ -179,7 +196,8 @@ export default class PlotPlugin extends Plugin {
 				enabled: true,
 				padding: 10,
 				cornerRadius: 8
-			}
+			},
+			
 		},
 		elements: {
 			line: {
@@ -248,9 +266,17 @@ export default class PlotPlugin extends Plugin {
 function isTuple(arr: number[]): arr is [number, number, number] {
 	return arr.length === 3 && arr.every(n => typeof n === "number");
 }
+/*
+function declareScalesType(data: PlotData[], scale: string) {
+	let sample = data[0]?.data[0]?.x;
+	switch (scale) {
+		case "x":
+		 sample = data[0].data[0].x;
+		case "y":
+		 sample = data[1]?.data[1]?.y;
 
-function declareScalesType(data: PlotData[]) {
-	const sample = data[0]?.data[0]?.x;
+	}
+	console.log(sample);
 
 	if (typeof sample === "number") return "linear";
 
@@ -258,6 +284,7 @@ function declareScalesType(data: PlotData[]) {
 
     return "linear";
 }
+	*/
 
 function getSourcePaths(src: string) {
 	const paths: string[] = [];

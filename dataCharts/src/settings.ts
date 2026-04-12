@@ -14,7 +14,7 @@ export interface PlotPluginSettings {
     marginY: number;
 	titleStatus: boolean,
 
-
+	zoomStatus: boolean;
     EborderWidth: number;
     pointRadius: number;
     useThemeColors: boolean;
@@ -38,7 +38,8 @@ export const DEFAULT_SETTINGS: PlotPluginSettings = {
     showBorder: true,
     transparentBackground: true,
     backgroundColor: "var(--background-primary)",
-	titleStatus: false
+	titleStatus: false,
+	zoomStatus: true
 }
 
 
@@ -58,6 +59,7 @@ export class PlotSettingTab extends PluginSettingTab {
         const appearance = this.makeSection(containerEl,"Appearance",true);
 
         const plot = this.makeSection(containerEl,"Plot Defaults",true);
+		const advanced = this.makeSection(containerEl,"Advanced",true);
 		/*
         new Setting(appearance)
         .setName("Use Theme Colors")
@@ -160,6 +162,17 @@ export class PlotSettingTab extends PluginSettingTab {
                 );
             
             plotSchema.forEach(item => this.buildPlotSetting(plot, item));
+
+			new Setting(advanced)
+			.setName("Disable Chart Zoom")
+			.setDesc("Disallow zooming and panning on charts.")
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.zoomStatus)
+				.onChange(async value => {
+					this.plugin.settings.zoomStatus = value;
+					await this.plugin.saveSettings();
+				})
+			)
        
 
 	}
