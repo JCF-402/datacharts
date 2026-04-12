@@ -1,12 +1,45 @@
 
 
-.canvas-plot {
-  background-color: var(--background-secondary);
-  border-radius: 6px;
-  padding: 8px;
-}
-
 .notice-success { background: #1d4d2b; color: white; }
 .notice-error { background: #5a1a1a; color: white; }
 .notice-info { background: #1d3557; color: white; }
 .notice-warning {background: #d98c1f; color: white;}
+
+.plot-settings-section {
+	padding: 16px;
+	margin-bottom: 16px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: var(--background-secondary);
+}
+
+
+.plot-settings-dropdown{
+	margin-bottom:12px;
+	border:1px solid var(--background-modifier-border);
+	border-radius:10px;
+	background:var(--background-secondary);
+	padding:8px 12px;
+}
+
+.plot-settings-dropdown summary{
+	cursor:pointer;
+	font-weight:600;
+	padding:6px 0;
+}
+
+.plot-settings-body{
+	padding-top:8px;
+}
+
+.plot-wrapper{
+	width:100%;
+	overflow:hidden;
+	position:relative;
+	box-sizing:border-box;
+}
+
+.plot-wrapper canvas{
+	display:block;
+	width:100% !important;
+}

@@ -14,7 +14,7 @@ type Dataset = {
 
 export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartConfiguration<"line">["options"] ) {
 
-
+    /*
     // Modifies the background color of the plot to adjust for whatever theme is being used. Look at styles.css
     const parent = canvas.parentElement;
 
@@ -25,6 +25,7 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
     parent.replaceChild(container, canvas);
     container.appendChild(canvas);
     }
+    */
     const datasets = buildDatasets(data,parsedMd)
     console.log(datasets);
     return new Chart(canvas, {

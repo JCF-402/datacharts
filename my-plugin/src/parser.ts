@@ -1,19 +1,19 @@
 
 import {create , all} from "mathjs";
-import type {ChartOptions} from "chart.js/auto";
+
+import type {ChartOptions, ChartConfiguration} from "chart.js/auto";
 import { Notice, App, TFile} from "obsidian";
-import { e } from "mathjs";
-import { boolean } from "mathjs";
-import { re } from "mathjs";
+
 import { getApp } from "appContext";
-import { exp } from "mathjs";
+
 import { customNotice } from "main";
+
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
     ln: math.log,
 });
 
-
+type CompiledExpression = any; // Not good I know
 
 export type Equation = {
     expr: string,
@@ -62,7 +62,7 @@ export type parsedText = {
 
 const builtInConstants = ["e","E","pi","PI"];
 
-const validPlotProperties = [
+export const validPlotProperties = [
   "type",
   "min",
   "max",
@@ -93,7 +93,7 @@ const validPlotProperties = [
 
 
 
-export async function handleMarkdown(markdown: string): Promise<parsedText> {
+export async function handleMarkdown(markdown: string, defaultProperties: ChartOptions<"line">): Promise<parsedText> {
     const lines = markdown.split("\n").filter(s => s !== "");
     const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
     const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
@@ -102,7 +102,7 @@ export async function handleMarkdown(markdown: string): Promise<parsedText> {
 
     // something.property = value
     const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
-    const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj."))); // Plot properties are "obj.property = value"
+    const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties); // Plot properties are "obj.property = value"
     const globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global."))); // Global properties are global.
     const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
     const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
@@ -148,25 +148,26 @@ function getData(datasets: RawExpr[]) {
 
     const parentObjects = datasets.filter(s => s.signature.startsWith("data")); // Only gets RawExpr objects that have data in the string.
     for (let data of parentObjects) {
-        const mDataPoints = [];
+        const mDataPoints: Data[] = [];
         if (data.signature.trim().endsWith(")")) {
             let name = data.signature.replace("data","").replace("(","").replace(")","");
             data.signature = name;
         }
         const vars = getVariable(data); // Gets the variables for the current data object so data(name) = [x,y] gets x and y as variables.
-        const objData = [];
+        const objData: string[] = []; // Stores data about the current data:: object
         for (let v of datasets) {
 
             if (vars.includes(v.signature)) {
                 if (v.signature.trim() === vars[0]) {
                 // v is currently something like x :: [0.3,0.4,0.5] but can also be strings ["Monday","Tuesday"]
                     try {
-                        objData.push(JSON.parse(v.expr.trim())); 
+                        objData.push(JSON.parse(v.expr.trim())); // Try and parse the expression with json. If fail alternate to replace
+                        // Elint gives error for json parse since it takes any but it shouldnt be an issue. It has catch as fallback.
+                        // Same below
 
                     } catch {
                         const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
                         objData.push(JSON.parse(safe));
-                        //new Notice("Mixed number/string axis values is not currently supported",5000);
                     }
                 } 
                 else if (v.signature.trim() === vars[1]) {
@@ -176,16 +177,25 @@ function getData(datasets: RawExpr[]) {
                     } catch {
                         const safe = v.expr.replace(/([A-Za-z]+\s*\d+)/g, '"$1"');
                         objData.push(JSON.parse(safe));
-                        //new Notice("Mixed number/string axis values is not currently supported",5000);
                     }
                 }
             }
         }
+
+        // ObjData contains the x and y values that belong to the current data:: object. Where the current data:: [x,y]
+        // If the expressions for x or y couldnt resolver or where never given it would be an error. I wont stop parsing so
+        if (objData[0] === undefined || objData[1] === undefined) {
+            customNotice(`Error: could not resolve data for ${data.signature}. Check inputs.`,"notic-error");
+            continue;
+        }
+        
         if (objData[0].length !== objData[1].length) new Notice(`Data arrays for ${data.signature} are not the same length`,5000);
 
         for (let i = 0; i < objData[0].length; i ++) {
-            const x = objData[0][i];
+            const x = objData[0][i]; // Can be undefined because I didnt check for obj[0][i] specifically. 
             const y = objData[1][i];
+            if (x === undefined || y === undefined) continue; // Shouldnt happen. Fingers crossed moment? 
+
             mDataPoints.push({x: x, y: y});
         }
         results.push({signature: data.signature, data: mDataPoints});
@@ -217,6 +227,8 @@ export function handleLineProperties(lines: string[], pattern: RegExp): LineProp
         const match = s.match(pattern);
         if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return [];
         const signature = match[1];
+        // Check if property is valid before matching
+
         const property = match[2];
         const value = match[3];
         return [{signature,property,value}];
@@ -224,36 +236,8 @@ export function handleLineProperties(lines: string[], pattern: RegExp): LineProp
     return lineProperties; // Returns an array of type LineProperties that contains all properties 
 }
 
-export function handlePlotProperties(lines: string[]) {
-    const defaultProperties: ChartOptions<"line"> = {
-    scales: {
-        x: { type: "linear", 
-            title: {
-                display: true,
-            } },
-        y: { type: "linear", 
-            title: {
-                display: true,
-            }
-        }
-    },
-    plugins: {
-        legend: {
-            display: true,
-            position: "right",
-            labels: {
-                usePointStyle: true,
-            }
-        },
-
-        title: {
-            display: true,
-        }
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false
-    };
+export function handlePlotProperties(lines: string[], defaultProperties: ChartOptions<"line">) {
+    const properties: ChartOptions<"line"> = defaultProperties;
     lines.forEach(prop => {
         const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["obj.scales.x.type","linear"]
         const key = rawKey?.replace("obj.",""); // obj.x.title -> scales.x.title
@@ -261,26 +245,28 @@ export function handlePlotProperties(lines: string[]) {
         if (key !== undefined && value !== undefined) { //Type Narrowing
             const last = key.split(".").pop() ?? ""
             if (validPlotProperties.includes(last)) { // validPlotProperties doesnt include x or y or etc just title
-                    helperPlotProperties(defaultProperties,key,value);
+                    helperPlotProperties(properties,key,value);
             }
             else {
+                // Evaluate using fuzzy matching later
                 new Notice(`Oops ${key} is not a valid property.`, 5000);
                 // Throw an error later
             }
         }     
     }
     );
-    return defaultProperties;
+    return properties;
 }
 
 function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string) {
     const path = key.split("."); // scales.x.title -> [scales, x, title]
-    let current: any = properties;
-    
+    let current: any = properties; // running copy of the properties. Any is needed because I am dynamically accessing a chartoptions
+    // object that requires static keys. I am already checking if the properties are valid in handlePlotProperties
+    // typescript doesnt know this because I am checking against a personal list. 
     for (let i = 0; i < path.length; i++) {
         const k = path[i];
 
-        if (!k) return;
+        if (k === undefined) return;
 
         if (i === path.length - 1) {
             current[k] = parseValue(value)
@@ -352,25 +338,25 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
         })
         // vars also filters out any variabales that are actually nested function signatures. Think if f(x) = G + x -> filters out G as long as G is declared as G: val
 
-
-        const variable =  newVars[0] ?? "x"; // !!!!!!!! Check this later 
+        const variable =  newVars[0]
+        if (variable === undefined) continue;
 
         // -----------------------------------------------------------------
 
         // --------- Handle Nested Equations ------------------
-        const compiledNested: Record<string,any> = {};
+        const compiledNested: Record<string, string | number | CompiledExpression> = {};
 
         for (let obj of parsedText.nestedEquations) {
             const expr = obj.expr.trim();
 
             if (isNumberString(expr)) {
-                compiledNested[obj.signature] = Number(expr);
+                compiledNested[obj.signature] = Number(expr); // if the expr is a scalar
             } 
             else if (expr.startsWith("[") && expr.endsWith("]")) {
-                compiledNested[obj.signature] = JSON.parse(expr);
+                compiledNested[obj.signature] = JSON.parse(expr); // expr is an array
             } 
             else {
-                compiledNested[obj.signature] = math.compile(expr);
+                compiledNested[obj.signature] = math.compile(expr); // expr is supposed to be a valid equation. We compile it and the compiled object. 
             }
         }
         
@@ -389,10 +375,12 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
 
         
         for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
-            const scope: any = { [variable]: val };
+            const scope: Record<string, string | number> = { [variable]: val };
 
             for (let name in compiledNested) {
                 const v = compiledNested[name]; // grabs the expression with "name" signature
+
+                if (v === undefined) continue;
 
                 if (typeof v === "number") {
                     scope[name] = v; // if the expression is a scalar (constant). Simply assign it to the scope with the signature as its variable. 
@@ -401,10 +389,14 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                     // at each value in the array. 
                     // So if f(x) = x^2 * D -> D: [0.3,0.4,0.5]. We get three plots, one for each D value. 
                     // ONLY the equation that contains the nested function needs to be plotted. Other functions work as normal.
+
                     if (   vars.includes(name)     ) { // Checks if the signature that matches the list is a variable of the current equation.
+
                         // Essentially evaluateExpressions needs to be called for each one. But evaluateExpressions has too much logic not need at this point.
                         // I also need to stop evaluating this equation entirely. 
-                        // Ill call the function that evaluates the expression with a value. That function returns an array with all datasets. Then I push that into the datasets array. Then break to the next equation
+                        // Ill call the function that evaluates the expression with a value. That function returns an array with all datasets. Then I push that into the datasets array. 
+                        // Then continue to the next equation
+
                          results.push(...handleNestedArray(equation,variable,localRange,v,name));
                          continue equationLoop;
                     } 
@@ -414,7 +406,7 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                 }
             }
 
-            let y = compile.evaluate(scope);
+            let y: number = compile.evaluate(scope);
 
             const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
 
@@ -435,10 +427,7 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
     // Math parser is used to determine the variable in the expression.
     // For cases where the expression is something like x^2 + G(x) + sin(x)
     if (expr.signature.includes("data")) {
-        return expr.expr
-            .replace(/[\[\]]/g, "")
-            .split(",")
-            .map(s => s.trim());
+        return expr.expr.replace("[", "").replace("]","").split(",").map(s => s.trim());
     }
 
     const node = math.parse(expr.expr);
@@ -447,7 +436,7 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
     node.traverse(function (node: any, path: string, parent: any){
         if (node.isSymbolNode) {
             if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
-                return
+                return;
             }
 
             //console.log(`This is the node.name: ${node.name}`);
@@ -475,7 +464,7 @@ function handleNestedArray(eq: Equation,variable: string, localRange: [number, n
             }
             let y = expr.evaluate(scope);
             const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
-            
+            if (isDiscontinuity === undefined) continue; 
             if (isDiscontinuity) { 
                 mDataPoints.push({ x: val, y: NaN });
                 continue;
