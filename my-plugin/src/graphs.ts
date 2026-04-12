@@ -4,7 +4,9 @@ import Chart, { ChartConfiguration } from "chart.js/auto";
 
 import type {PlotData,Data,LineProperties} from "./parser"
 
-
+const validLineProperties = [
+    
+]
 
 type Dataset = {
     label: string,

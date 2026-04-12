@@ -51,18 +51,20 @@ export default class PlotPlugin extends Plugin {
 						}
 
 
-					console.log(JSON.stringify(parsedText.chartOptions, null, 2));
+					//console.log(JSON.stringify(parsedText.chartOptions, null, 2));
 					//console.log(data);
-					console.log(parsedText.tableData);
+					//console.log(parsedText.tableData);
 
-				if (!chartInstance) { // If the chart doesnt exist yet. Create it
+				if (!chartInstance) { // If the chart doesnt exist yet. Create it			
 					const wrapper = el.createDiv("plot-wrapper");
-					
 					wrapper.style.height = `${this.settings.canvasHeight}px`;
 					wrapper.style.padding = `${this.settings.canvasPadding}px`;
 					wrapper.style.borderRadius = `${this.settings.canvasRadius}px`;
 					wrapper.style.margin = `${this.settings.marginY}px 0`;
 					wrapper.style.background = this.settings.transparentBackground ? "transparent" : this.settings.backgroundColor;
+					wrapper.style.border = this.settings.showBorder ? "none" : "1px solid var(--background-modifier-border)"
+
+
 					const canvas = wrapper.createEl("canvas"); 
 					canvas.style.width = "100%";
 					canvas.style.height = `${this.settings.canvasHeight}px`;
@@ -137,6 +139,8 @@ export default class PlotPlugin extends Plugin {
 
 
 	getDefaultPlotProperties(): ChartConfiguration<"line">["options"] {
+		const style = getComputedStyle(document.body);
+		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
 	return  {
 		responsive: true,
 		maintainAspectRatio: false,
@@ -156,11 +160,20 @@ export default class PlotPlugin extends Plugin {
 					boxWidth: 5,
 					boxHeight: 5,
 					padding: 14,
-					usePointStyle: true
+					usePointStyle: true,
+					font: {
+						family: fontFamily,
+						size: 12
+					}
 				}
 			},
 			title: {
-				display: false,
+				display: this.settings.titleStatus,
+				font: {
+					family: fontFamily,
+					size: 13,
+					weight: 600
+				}
 			},
 			tooltip: {
 				enabled: true,
@@ -194,11 +207,15 @@ export default class PlotPlugin extends Plugin {
 				},
 
 				ticks: {
-					display: true
+					display: true,
+					font: {
+						family: fontFamily,
+						size: 11
+					}
 				},
 
 				title: {
-					display: false,
+					display: this.settings.titleStatus,
 					text: ""
 				}
 			},
@@ -216,7 +233,7 @@ export default class PlotPlugin extends Plugin {
 				},
 
 				title: {
-					display: false,
+					display: this.settings.titleStatus,
 					text: ""
 				}}}};
 				

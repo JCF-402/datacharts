@@ -12,6 +12,7 @@ export interface PlotPluginSettings {
     backgroundColor: string;
     transparentBackground: boolean;
     marginY: number;
+	titleStatus: boolean,
 
 
     EborderWidth: number;
@@ -36,7 +37,8 @@ export const DEFAULT_SETTINGS: PlotPluginSettings = {
     marginY: 10,
     showBorder: true,
     transparentBackground: true,
-    backgroundColor: "var(--background-primary)"
+    backgroundColor: "var(--background-primary)",
+	titleStatus: false
 }
 
 
@@ -56,6 +58,7 @@ export class PlotSettingTab extends PluginSettingTab {
         const appearance = this.makeSection(containerEl,"Appearance",true);
 
         const plot = this.makeSection(containerEl,"Plot Defaults",true);
+		/*
         new Setting(appearance)
         .setName("Use Theme Colors")
         .setDesc("Adapt charts to current theme")
@@ -66,6 +69,7 @@ export class PlotSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 
 			}));
+		*/
 
 
 		new Setting(appearance) 
@@ -135,7 +139,7 @@ export class PlotSettingTab extends PluginSettingTab {
             );
 
             new Setting(appearance) 
-			.setName("Show Border")
+			.setName("Don't Show Border")
 			.setDesc("Controls if canvas border shows.")
                 .addToggle(toggle => toggle
                     .setValue(this.plugin.settings.showBorder)
@@ -256,7 +260,7 @@ type PlotSettingSchema =
 	  }
 	| {
 			type: "toggle";
-			key: "useThemeColors" | "legendStatus";
+			key: "useThemeColors" | "legendStatus" | "titleStatus";
 			name: string;
 			desc: string;
 	  }
@@ -292,6 +296,12 @@ const plotSchema: PlotSettingSchema[] = [
 			logarithmic: "Logarithmic",
 			time: "Time"
 		}
+	},
+	{
+		type: "toggle",
+		key: "titleStatus",
+		name: "Display Ttiles",
+		desc: "If on titles will always be displayed. Meaning you don't have to use obj.plugins.title.display = true \n Kept false as default for tidiness."
 	},
 	{
 		type: "number",

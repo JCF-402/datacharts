@@ -33,13 +33,21 @@
 }
 
 .plot-wrapper{
-	width:100%;
-	overflow:hidden;
-	position:relative;
-	box-sizing:border-box;
-}
+	background-color:  linear-gradient(	rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--background-primary);
+	
+	
 
+}
+.plot-wrapper:hover {
+	box-shadow: var(--embed-block-shadow-hover);
+}
 .plot-wrapper canvas{
 	display:block;
-	width:100% !important;
+	width:100% 
 }
+
+.markdown-source-view.mod-cm6 
+.cm-preview-code-block.cm-lang-lineplot:hover{
+	box-shadow:none ;
+}
+
