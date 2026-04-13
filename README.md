@@ -63,6 +63,7 @@ Generates the plot below. Notice that to name the data object you must use the  
 Say you have a markdown table that looks something like this. 
 
 ![Source Example](assets/sourceKey.png)
+
 You can generate a plot for this table like this. 
 
 ```lineplot
