@@ -2,7 +2,7 @@
 
 DataCharts is an Obsidian plugin for creating charts, plotting functions, and visualizing note data directly in markdown.
 
-![Line Plot Demo][assets/linePlotGIF.gif]
+![Line Plot Demo](assets/linePlotGIF.gif)
 
 ## Features
 
@@ -25,8 +25,8 @@ DataCharts is an Obsidian plugin for creating charts, plotting functions, and vi
 ## Usage
 
 Currently the supported way to create a dataChart is by creating a codeblock with the title `lineplot`.
-
-```lineplot
+```
+title^ is lineplot
 
 // Some expression
 
@@ -41,40 +41,28 @@ The following example shows how to create a simple plot using the **data** keywo
 ```lineplot
 
 data:: [Month, Mood]
-
 Month:: [ Jan, Feb, Mar, Apr, May, June, July, Aug, Sept, Oct, Nov, Dec]
-
 Mood:: [12,11,10,9,8,7,6,5,4,3,2,1]
 
-  
-
 obj.scales.x.type = category
-
 obj.plugins.legend.display = true
 
-  
-  
-
 data(2026):: [Month, CrazyEvents]
-
 CrazyEvents:: [3,6,7,9,12,14,4,20,21,20,4,29]
 
 obj.plugins.title.text = Using data::
   
-
 ```
-
-  
 
 Generates the plot below. Notice that to name the data object you must use the  `data(name)` format. `obj.properties` are options you can modify per plot and belong to ChartJs options attributes. 
 
-![Data Plot][assets/dataPlot.png]
+![Data Plot](assets/dataPlot.png)
 
 ## Source from Tables 
 
 Say you have a markdown table that looks something like this. 
 
-![Source Example][assets/sourceKey.png]
+![Source Example](assets/sourceKey.png)
 You can generate a plot for this table like this. 
 
 ```lineplot
@@ -88,7 +76,7 @@ obj.plugins.title.text = Using source::
 
 **Note:** Instead of column indexes you can also use the column names like so `source(My Finances[Month,Spent])`. The `source(name)` name field is required. *By default it will try to plot the first two columns.* 
 
-![Source Plot][assets/sourcePlot.png]
+![Source Plot](assets/sourcePlot.png)
 
 ## Plotting Equations
 
@@ -97,9 +85,8 @@ Plotting works by writing the mathematical equation with an = sign. It uses Math
 y = x
 f(x) = sin(x)
 
-
 ```
-![Simple Plot][assets/simplePlot.png]
+![Simple Plot](assets/simplePlot.png)
 ### Nested Functions
 
 #### Scalar Values
@@ -109,17 +96,20 @@ You can declare a constant number to reuse in multiple equations as a variable.
 g(x) = ln(x)*G
 f(x) = 0.5*G
 G: 10
+
 ```
 
 #### Lists of Values
 You can declare a nested function as a list of variables to create multiple plots for one equation. 
 ```lineplot
+
 y = sin(x)*amplitude
 amplitude: [3,9,11.12]
 obj.plugins.legend.display = true
+
 ```
 
-![List Plot][assets/listPlot.png]
+![List Plot](assets/listPlot.png)
 #### Equations that depend on main variable
 You can declare a nested function as a function that also depends on the main variable. I plan on adding support for declaring another range for a function.
 ```lineplot
@@ -130,8 +120,10 @@ p: 11x
 ```
 But this doesn't currently work since b isn't recognized. However you can still declare b as a constant. 
 ```lineplot
+
 f(x) = sin(x)*p
 p: b^2
+
 ```
 
 ## Modifying Properties
@@ -139,6 +131,7 @@ p: b^2
 ### Line Properties
 You can specify the styling of each dataset using its name. Example. More properties can be found at  [Chart.js](https://www.chartjs.org/). 
 ```lineplot
+
 somename = x + 1
 
 somename.borderColor = yellow
