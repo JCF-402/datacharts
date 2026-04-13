@@ -4,7 +4,7 @@
 	"version": "1.0.0",
 	"main": "main.js",
 	"minAppVersion": "0.15.0",
-	"description": "Create charts and visualize data directly inside Obsidian notes.",
+	"description": "Create charts and visualize data directly inside notes.",
 	"author": "DonutCar Fountains",
 	"isDesktopOnly": false
 }
