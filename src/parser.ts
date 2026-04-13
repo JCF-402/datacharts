@@ -6,7 +6,7 @@ import { Notice, App, TFile} from "obsidian";
 
 import { getApp } from "appContext";
 
-import { customNotice } from "main";
+import { customNotice,isTuple } from "main";
 import { validLineProperties } from "./graphs";
 import { min } from "mathjs";
 import { string } from "mathjs";
@@ -110,7 +110,6 @@ export async function handleMarkdown(markdown: string, defaultProperties: ChartO
     const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
     const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
     const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
-    const manualDataRegex = /^(\w+)(?:\(([^)]+)\))?\s*::\s*(.+)$/;
 
     // something.property = value
     const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
@@ -172,7 +171,7 @@ function getData(datasets: RawExpr[]) {
                 if (v.signature.trim() === vars[0]) {
                 // v is currently something like x :: [0.3,0.4,0.5] but can also be strings ["Monday","Tuesday"]
                         try {
-                            objData.push(JSON.parse(v.expr.trim()));
+                            objData.push(JSON.parse(v.expr.trim())); // Gives me an any but JSON just works well for numbers
                         } catch {
                             const safe = (v.expr.replace("[","").replace("]","").split(",").map((s: string) => s.trim()));
                             objData.push(safe);
@@ -349,7 +348,8 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
         // -----------------------------------------------------------------
 
         // --------- Handle Nested Equations ------------------
-        const compiledNested: Record<string, string | number | CompiledExpression> = {};
+        const compiledNested: Record<string, string | number | CompiledExpression> = {}; // CompiledExpressions is any but it helps visualize
+        // the kind of values I expect to receive.
 
         for (let obj of parsedText.nestedEquations) {
             const expr = obj.expr.trim();
@@ -358,7 +358,8 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                 compiledNested[obj.signature] = Number(expr); // if the expr is a scalar
             } 
             else if (expr.startsWith("[") && expr.endsWith("]")) {
-                compiledNested[obj.signature] = JSON.parse(expr); // expr is an array
+                const parsed = expr.replace("[","").replace("]","").split(",").map(s => Number(s));
+                compiledNested[obj.signature] = parsed // expr is an array
             } 
             else {
                 compiledNested[obj.signature] = math.compile(expr); // expr is supposed to be a valid equation. We compile it and the compiled object. 
@@ -371,7 +372,11 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
         const limits = parsedText.lineProperties.filter(l => l.signature === equation.signature && l.property === "xrange");
         let localRange: [number, number, number] = xRange;
         if (limits.length && limits[0]?.value){
-            localRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
+            const parsed = limits[0].value.replace("[","").replace("]","").split(",").map(s => Number(s));
+            //localRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
+            if (!isTuple(parsed)) localRange = [-10,10,0.1];
+            else { localRange = parsed}
+           
         }
         // ------------------------------------------------------------------------------
 
@@ -446,8 +451,6 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
             if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
                 return;
             }
-
-            //console.log(`This is the node.name: ${node.name}`);
             vars.add(node.name);
         }
     })
@@ -634,7 +637,7 @@ function extractTable(markdown: string, signature: string) {
 export function findPossibleProperty(key: string, validProps: string[], flag: string, validRoots?: string[], ) {
 
     switch (flag) {
-        case "LineProperty":
+        case "LineProperty": {
                 let bestMatch = "";
                 let bestDist = Infinity;
             for (let prop of validLineProperties) {
@@ -652,10 +655,11 @@ export function findPossibleProperty(key: string, validProps: string[], flag: st
                     return
                 }
 
-            
-        case "PlotProperty":
-                bestMatch = "";
-                bestDist = Infinity;
+            break;
+        }
+        case "PlotProperty": {
+               let bestMatch = "";
+                let bestDist = Infinity;
             const keyPath = key.split("."); 
             if (keyPath[0] === undefined) return;
             if (validRoots === undefined) return;
@@ -699,6 +703,8 @@ export function findPossibleProperty(key: string, validProps: string[], flag: st
 
                 }
             }
+            break;
+        }
 
 
             

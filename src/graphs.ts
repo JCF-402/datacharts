@@ -48,7 +48,6 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
 
 export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
 	return data.map(eq => {
-        const randomColor = getRandomRGB();
 		const dataset: Dataset = {
 			label: eq.signature,
 			data: eq.data.map((p: Data) => ({ x: p.x, y: p.y })),

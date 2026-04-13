@@ -1,7 +1,7 @@
 
-import {handleMarkdown,handleGlobalOptions, evaluateExpressions, PlotData, parsedText, handleTableData, validPlotProperties} from "./parser"
+import {handleMarkdown, handleGlobalOptions, evaluateExpressions, PlotData, parsedText, handleTableData} from "./parser"
 import { createPlot, buildDatasets} from "./graphs";
-import {Notice, Plugin, Vault} from "obsidian";
+import {Notice, Plugin} from "obsidian";
 import { apply } from "mathjs";
 import { setApp } from "appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
@@ -60,17 +60,21 @@ export default class PlotPlugin extends Plugin {
 
 				if (!chartInstance) { // If the chart doesnt exist yet. Create it			
 					const wrapper = el.createDiv("plot-wrapper");
-					wrapper.style.height = `${this.settings.canvasHeight}px`;
-					wrapper.style.padding = `${this.settings.canvasPadding}px`;
-					wrapper.style.borderRadius = `${this.settings.canvasRadius}px`;
-					wrapper.style.margin = `${this.settings.marginY}px 0`;
-					wrapper.style.background = this.settings.transparentBackground ? "transparent" : this.settings.backgroundColor;
-					wrapper.style.border = this.settings.showBorder ? "none" : "1px solid var(--background-modifier-border)"
-
-
+					console.log(this.settings.transparentBackground);
+					console.log(this.settings.backgroundColor);
+					wrapper.setCssProps({
+						"--wrapper-height": `${this.settings.canvasHeight}px`,
+						"--wrapper-padding": `${this.settings.canvasPadding}px`,
+						"--wrapper-borderRadius": `${this.settings.canvasRadius}px`,
+						"--wrapper-margin": `${this.settings.marginY}px 0px`,
+						"--wrapper-background": this.settings.transparentBackground ? "transparent" : "var(--background-secondary)",
+						"--wrapper-border":  this.settings.showBorder ? "none" : "1px solid var(--background-modifier-border)"
+					})
 					const canvas = wrapper.createEl("canvas"); 
-					canvas.style.width = "100%";
-					canvas.style.height = `${this.settings.canvasHeight}px`;
+					canvas.setCssProps({
+						width: "100%",
+						height: `${this.settings.canvasHeight}px`
+					})
 
 					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions); // Chart is created. 
 					this.charts.add(chartInstance);
@@ -106,9 +110,6 @@ export default class PlotPlugin extends Plugin {
 			// This is for some other time
 			const canvas = document.createElement("canvas"); 
 
-			canvas.style.width = "100%";
-			canvas.style.height = "300px";
-
 			el.appendChild(canvas);
 
 
@@ -118,7 +119,7 @@ export default class PlotPlugin extends Plugin {
 
 	onunload(): void {
 		this.charts.forEach(chart => {
-			try {chart.destroy();} catch {}
+			try {chart.destroy();} catch {return}
 		});
 		this.charts.clear();
 	}
@@ -263,7 +264,7 @@ export default class PlotPlugin extends Plugin {
 
 
 
-function isTuple(arr: number[]): arr is [number, number, number] {
+export function isTuple(arr: number[]): arr is [number, number, number] {
 	return arr.length === 3 && arr.every(n => typeof n === "number");
 }
 /*
@@ -309,9 +310,9 @@ function checkGlobalRange(parsedText: parsedText) {
 		
 					const rhs = line.split("=")[1];
 					if (rhs === undefined) return [-10,10,0.1];
-
 					try {
-						const parsed = JSON.parse(rhs.trim());
+						const parsed = rhs.replace("[","").replace("]","").split(",").map(s => Number(s));
+						//const parsed = JSON.parse(rhs.trim());
 						if (Array.isArray(parsed) && isTuple(parsed)) {
 							globalXRange = parsed;
 							return globalXRange;

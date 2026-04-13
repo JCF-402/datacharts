@@ -33,8 +33,12 @@
 }
 
 .plot-wrapper{
-	background-color:  linear-gradient(	rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--background-primary);
-	
+	border-radius: var(--wrapper-borderRadius);
+	background: var(--wrapper-background);
+	height: var(--wrapper-height);
+	padding: var(--wrapper-padding);
+	border: var(--wrapper-border);
+	margin: var(--wrapper-margin);
 	
 
 }

@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: PlotPluginSettings = {
     marginY: 10,
     showBorder: true,
     transparentBackground: true,
-    backgroundColor: "var(--background-primary)",
+    backgroundColor: "var(--background-secondary)",
 	titleStatus: false,
 	zoomStatus: true
 }
@@ -75,7 +75,7 @@ export class PlotSettingTab extends PluginSettingTab {
 
 
 		new Setting(appearance) 
-			.setName("Canvas Height")
+			.setName("Canvas height")
 			.setDesc("Default chart height in pixels: 320px")
 			.addText(text => text
 				.setPlaceholder('320')
@@ -97,7 +97,7 @@ export class PlotSettingTab extends PluginSettingTab {
             );
 
             new Setting(appearance) 
-			.setName("Canvas Padding")
+			.setName("Canvas padding")
 			.setDesc("Controls spacing between border and chart.")
 			.addText(text => text
 				.setPlaceholder('12')
@@ -119,7 +119,7 @@ export class PlotSettingTab extends PluginSettingTab {
             );
 
             new Setting(appearance) 
-			.setName("Canvas Radius")
+			.setName("Canvas radius")
 			.setDesc("Controls how rounded the corners look.")
 			.addText(text => text
 				.setPlaceholder('12')
@@ -141,7 +141,7 @@ export class PlotSettingTab extends PluginSettingTab {
             );
 
             new Setting(appearance) 
-			.setName("Don't Show Border")
+			.setName("Don't show border")
 			.setDesc("Controls if canvas border shows.")
                 .addToggle(toggle => toggle
                     .setValue(this.plugin.settings.showBorder)
@@ -151,7 +151,7 @@ export class PlotSettingTab extends PluginSettingTab {
                     })
                 );
             new Setting(appearance) 
-			.setName("Transparent Background")
+			.setName("Transparent background")
 			.setDesc("Toggles transparent background.")
                 .addToggle(toggle => toggle
                     .setValue(this.plugin.settings.transparentBackground)
@@ -164,7 +164,7 @@ export class PlotSettingTab extends PluginSettingTab {
             plotSchema.forEach(item => this.buildPlotSetting(plot, item));
 
 			new Setting(advanced)
-			.setName("Disable Chart Zoom")
+			.setName("Disable chart zoom")
 			.setDesc("Disallow zooming and panning on charts.")
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.zoomStatus)
@@ -225,11 +225,11 @@ export class PlotSettingTab extends PluginSettingTab {
 
 				drop
 					.setValue(this.plugin.settings[item.key])
-					.onChange(async value => {
+					.onChange( value => {
 						this.plugin.settings[item.key] =
 							value as ScaleType;
 
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					});
 			});
 			break;
