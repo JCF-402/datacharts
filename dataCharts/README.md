@@ -1,6 +1,9 @@
 # DataCharts Plugin
 
 DataCharts is an Obsidian plugin for creating charts, plotting functions, and visualizing note data directly in markdown.
+
+![Line Plot Demo][assets/linePlotGIF.gif]
+
 ## Features
 
   
@@ -65,13 +68,13 @@ obj.plugins.title.text = Using data::
 
 Generates the plot below. Notice that to name the data object you must use the  `data(name)` format. `obj.properties` are options you can modify per plot and belong to ChartJs options attributes. 
 
-![[dataPlot.png]]
+![Data Plot][assets/dataPlot.png]
 
 ## Source from Tables 
 
 Say you have a markdown table that looks something like this. 
 
-![[sourceKey.png]]
+![Source Example][assets/sourceKey.png]
 You can generate a plot for this table like this. 
 
 ```lineplot
@@ -85,7 +88,7 @@ obj.plugins.title.text = Using source::
 
 **Note:** Instead of column indexes you can also use the column names like so `source(My Finances[Month,Spent])`. The `source(name)` name field is required. *By default it will try to plot the first two columns.* 
 
-![[sourcePlot.png]]
+![Source Plot][assets/sourcePlot.png]
 
 ## Plotting Equations
 
@@ -96,7 +99,7 @@ f(x) = sin(x)
 
 
 ```
-![[simplePlot.png]]
+![Simple Plot][assets/simplePlot.png]
 ### Nested Functions
 
 #### Scalar Values
@@ -116,7 +119,7 @@ amplitude: [3,9,11.12]
 obj.plugins.legend.display = true
 ```
 
-![[listPlot.png]]
+![List Plot][assets/listPlot.png]
 #### Equations that depend on main variable
 You can declare a nested function as a function that also depends on the main variable. I plan on adding support for declaring another range for a function.
 ```lineplot

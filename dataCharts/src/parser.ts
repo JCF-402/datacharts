@@ -7,7 +7,7 @@ import { Notice, App, TFile} from "obsidian";
 import { getApp } from "appContext";
 
 import { customNotice } from "main";
-import { validLineProperties } from "graphs";
+import { validLineProperties } from "./graphs";
 import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
