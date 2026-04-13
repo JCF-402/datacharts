@@ -60,8 +60,6 @@ export default class PlotPlugin extends Plugin {
 
 				if (!chartInstance) { // If the chart doesnt exist yet. Create it			
 					const wrapper = el.createDiv("plot-wrapper");
-					console.log(this.settings.transparentBackground);
-					console.log(this.settings.backgroundColor);
 					wrapper.setCssProps({
 						"--wrapper-height": `${this.settings.canvasHeight}px`,
 						"--wrapper-padding": `${this.settings.canvasPadding}px`,
