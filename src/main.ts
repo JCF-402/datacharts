@@ -1,13 +1,14 @@
 
-import {handleMarkdown, handleGlobalOptions, evaluateExpressions, PlotData, parsedText, handleTableData} from "./parser"
-import { createPlot, buildDatasets} from "./graphs";
+import {handleMarkdown, handleGlobalOptions, evaluateExpressions, PlotData, parsedText, handleTableData} from "../helpers/parser"
+import { createPlot, buildDatasets} from "../helpers/graphs";
 import {Notice, Plugin} from "obsidian";
 import { apply } from "mathjs";
-import { setApp } from "appContext";
+import { setApp } from "../helpers/appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
 import { ChartConfiguration } from "chart.js/auto";
-
-
+import {autocompletion} from "@codemirror/autocomplete";
+import {EditorView} from "@codemirror/view";
+import { linePlotCompletionSource } from "../helpers/plotProperties";
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
@@ -17,12 +18,19 @@ export default class PlotPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new PlotSettingTab(this.app,this));
 
+		this.registerEditorExtension([
+			autocompletion({
+				override: [linePlotCompletionSource(this.settings)],
+				activateOnTyping: true,
+			})]
+		)
+
 		
 
 		setApp(this.app); // Sets current app as the working app to use globally. 
 		this.registerMarkdownCodeBlockProcessor("lineplot", 
 			async (source: string, el: HTMLElement) => { // Runs whenever a codeblock with the "lineplot" identifier is edited.
-			const defaultProperties: ChartConfiguration<"line">["options"] = this.getDefaultPlotProperties();
+			const defaultProperties: ChartConfiguration<"line">["options"] = getDefaultPlotProperties(this.settings);
 			const sourcePaths = getSourcePaths(source); // Gets any source:: item from path PATHS. Stores them for comparisons later.
 			if (defaultProperties === undefined) return;
 			let cachedParsedText = await handleMarkdown(source,defaultProperties); // Evaluates all the markdown in the codeblock and creates a ParsedText type object.
@@ -60,6 +68,7 @@ export default class PlotPlugin extends Plugin {
 
 				if (!chartInstance) { // If the chart doesnt exist yet. Create it			
 					const wrapper = el.createDiv("plot-wrapper");
+
 					wrapper.setCssProps({
 						"--wrapper-height": `${this.settings.canvasHeight}px`,
 						"--wrapper-padding": `${this.settings.canvasPadding}px`,
@@ -136,126 +145,11 @@ export default class PlotPlugin extends Plugin {
 	refreshPlots() {
 		this.app.workspace.updateOptions();
 	}
-
-
-	getDefaultPlotProperties(): ChartConfiguration<"line">["options"] {
-		const style = getComputedStyle(document.body);
-		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
-	return  {
-		responsive: true,
-		maintainAspectRatio: false,
-		animation: false,
-		interaction: {
-			mode: "nearest",
-			intersect: false
-		},
-		layout: {
-			padding: 8
-		},
-		plugins: {
-			legend: {
-				display: this.settings.legendStatus,
-				position: "right",
-				labels: {
-					boxWidth: 5,
-					boxHeight: 5,
-					padding: 14,
-					usePointStyle: true,
-					font: {
-						family: fontFamily,
-						size: 12
-					}
-				}
-			},
-			zoom: {
-				
-				pan: {
-					enabled: this.settings.zoomStatus ? false : true,
-					mode: "xy"
-				},
-				zoom: {
-					wheel: {
-						enabled: this.settings.zoomStatus ? false : true,
-					},
-					pinch: {
-						enabled: this.settings.zoomStatus ? false : true,
-					},
-					mode: "xy"
-				}
-			},
-			title: {
-				display: this.settings.titleStatus,
-				font: {
-					family: fontFamily,
-					size: 13,
-					weight: 600
-				}
-			},
-			tooltip: {
-				enabled: true,
-				padding: 10,
-				cornerRadius: 8
-			},
-			
-		},
-		elements: {
-			line: {
-				borderWidth: this.settings.EborderWidth,
-				tension: 0.15,
-				fill: false,
-			},
-
-			point: {
-				radius: this.settings.pointRadius,
-				hoverRadius: 4,
-				hitRadius: 6,
-				pointStyle: "circle"
-			}
-		},
-
-		scales: {
-			x: {
-				type: this.settings.xScalesType,
-
-				display: true,
-
-				grid: {
-					display: true
-				},
-
-				ticks: {
-					display: true,
-					font: {
-						family: fontFamily,
-						size: 11
-					}
-				},
-
-				title: {
-					display: this.settings.titleStatus,
-					text: ""
-				}
-			},
-
-			y: {
-				type: this.settings.yScalesType,
-				display: true,
-
-				grid: {
-					display: true
-				},
-
-				ticks: {
-					display: true
-				},
-
-				title: {
-					display: this.settings.titleStatus,
-					text: ""
-				}}}};
-				
 	
-		}
+	
+
+
+	
 	
 }
 
@@ -265,25 +159,7 @@ export default class PlotPlugin extends Plugin {
 export function isTuple(arr: number[]): arr is [number, number, number] {
 	return arr.length === 3 && arr.every(n => typeof n === "number");
 }
-/*
-function declareScalesType(data: PlotData[], scale: string) {
-	let sample = data[0]?.data[0]?.x;
-	switch (scale) {
-		case "x":
-		 sample = data[0].data[0].x;
-		case "y":
-		 sample = data[1]?.data[1]?.y;
 
-	}
-	console.log(sample);
-
-	if (typeof sample === "number") return "linear";
-
-    if (typeof sample === "string") return "category";
-
-    return "linear";
-}
-	*/
 
 function getSourcePaths(src: string) {
 	const paths: string[] = [];
@@ -333,3 +209,121 @@ export function customNotice(msg: string, cls = "", timeout = 4000) {
     });
 }
 
+export function getDefaultPlotProperties(settings: PlotPluginSettings): ChartConfiguration<"line">["options"] {
+		const style = getComputedStyle(document.body);
+		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
+	return  {
+		responsive: true,
+		maintainAspectRatio: false,
+		animation: false,
+		interaction: {
+			mode: "nearest",
+			intersect: false
+		},
+		layout: {
+			padding: 8
+		},
+		plugins: {
+			legend: {
+				display: settings.legendStatus,
+				position: "right",
+				labels: {
+					boxWidth: 5,
+					boxHeight: 5,
+					padding: 14,
+					usePointStyle: true,
+					font: {
+						family: fontFamily,
+						size: 12
+					}
+				}
+			},
+			zoom: {
+				
+				pan: {
+					enabled: settings.zoomStatus ? false : true,
+					mode: "xy"
+				},
+				zoom: {
+					wheel: {
+						enabled: settings.zoomStatus ? false : true,
+					},
+					pinch: {
+						enabled: settings.zoomStatus ? false : true,
+					},
+					mode: "xy"
+				}
+			},
+			title: {
+				display: settings.titleStatus,
+				font: {
+					family: fontFamily,
+					size: 13,
+					weight: 600
+				}
+			},
+			tooltip: {
+				enabled: true,
+				padding: 10,
+				cornerRadius: 8
+			},
+			
+		},
+		elements: {
+			line: {
+				borderWidth: settings.EborderWidth,
+				tension: 0.15,
+				fill: false,
+			},
+
+			point: {
+				radius: settings.pointRadius,
+				hoverRadius: 4,
+				hitRadius: 6,
+				pointStyle: "circle"
+			}
+		},
+
+		scales: {
+			x: {
+				type: settings.xScalesType,
+
+				display: true,
+
+				grid: {
+					display: true
+				},
+
+				ticks: {
+					display: true,
+					font: {
+						family: fontFamily,
+						size: 11
+					}
+				},
+
+				title: {
+					display: settings.titleStatus,
+					text: ""
+				}
+			},
+
+			y: {
+				type: settings.yScalesType,
+				display: true,
+
+				grid: {
+					display: true
+				},
+
+				ticks: {
+					display: true
+				},
+
+				title: {
+					display: settings.titleStatus,
+					text: ""
+				}}}};
+				
+	
+		}

@@ -4,13 +4,14 @@ import {create , all} from "mathjs";
 import type {ChartOptions, ChartConfiguration} from "chart.js/auto";
 import { Notice, App, TFile} from "obsidian";
 
-import { getApp } from "appContext";
+import { getApp } from "./appContext";
 
 import { customNotice,isTuple } from "main";
 import { validLineProperties } from "./graphs";
 import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
+import {validPlotProperties,validRoots} from "./plotProperties"
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
@@ -66,42 +67,8 @@ export type parsedText = {
 
 const builtInConstants = ["e","E","pi","PI"];
 
-export const validPlotProperties = [
-  "type",
-  "min",
-  "max",
-  "display",
-  "position",
-  "text",
-  "color",
-  "stepSize",
-  "beginAtZero",
-  "suggestedMin",
-  "suggestedMax",
-  "lineWidth",
-  "drawBorder",
-  "drawOnChartArea",
-  "drawTicks",
-  "tickLength",
-  "mode",
-  "intersect",
-  "enabled",
-  "borderColor",
-  "backgroundColor",
-  "borderWidth",
-  "pointRadius",
-  "tension",
-  "fill",
-  "hidden"
-];
 
-const validRoots = [
-    "plugins",
-    "scales",
-    "elements",
-    "interaction",
-    "animation"
-]
+
 
 
 
