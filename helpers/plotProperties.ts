@@ -3,6 +3,9 @@ import { CompletionContext } from "@codemirror/autocomplete";
 import { PlotPluginSettings } from "settings";
 import { getDefaultPlotProperties } from "main";
 import LinearScaleBase from "chart.js/dist/scales/scale.linearbase";
+import { index } from "mathjs";
+import { format } from "mathjs";
+import { filter } from "mathjs";
 
 
 export const myCompletions = {
@@ -53,6 +56,37 @@ export const validPlotProperties = [
   "hidden"
 ];
 
+export const validLineProperties = [
+    "backgroundColor",
+    "borderCapStyle",
+    "borderColor",
+    "borderDash",
+    "borderDashOffset",
+    "borderJoinStyle",
+    "borderWidth",
+    "fill",
+    "tension",
+    "showLine",
+    "spanGaps",
+    "xrange",
+    "pointStyle",
+    "pointRadius"
+]
+
+export const globalOptions = [
+    "xrange",
+    "canvasWidth",
+    "canvasHeight",
+    "canvasRadius",
+    "canvasBackground",
+    "canvasMargin",
+    "canvasPadding"
+
+]
+
+const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*/;
+
+
 type TreeNode = {
   [key: string]: TreeNode;
 };
@@ -84,9 +118,34 @@ export function linePlotCompletionSource(settings: PlotPluginSettings) {
                 from: context.pos - partial.length, // we only replace the property being written not the whole obj. -> path
                 options: Object.keys(node).filter(key => key.startsWith(partial)).map( key => ({
                     label: key,
-                    type: "property"
+                    type: "function"
                 }))
             };
+        }
+        
+        else if (propertyPattern.test(match.text) && !match.text.startsWith("obj.") && !match.text.startsWith("global.")) {
+            const dotIndex = match.text.indexOf(".");
+            const replaceText = match.text.slice(dotIndex + 1); // Removes anything before . so f(x).borderColor -> borderColor
+
+            return {
+                from: context.pos - replaceText.length,
+                options: validLineProperties.map(s => ({
+                    label: s,
+                    type: "function"
+                }))
+            }
+        }
+
+        else if (match.text.startsWith("global.")) {
+            const path = match.text.slice(7) // Removes global.
+            return {
+                from: context.pos - path.length,
+                options: globalOptions.map(s => ({
+                    label: s,
+                    type: "function",
+                    filter: false
+                }))
+            }
         }
 
         return null;
@@ -117,7 +176,7 @@ function inLineplotBlock(context: CompletionContext): boolean {
 export function objectToTree(obj: any): TreeNode {
   const tree: TreeNode = {};
 
-  for (const key in obj) {
+  for (const key in obj) { 
     const value = obj[key];
 
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {

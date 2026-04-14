@@ -156,7 +156,7 @@ Global properties will work on canvas/wrapper customization. For example you wil
 
 Currently the only global property implemented is `global.xrange`.
 
-#### xrange
+### xrange
 **xrange** is a custom property that can be defined for each dataset. Using the example above `somename.xrange = [Start, End, Step]`.  You can also define a range for all datasets in a plot using `global.xrange`.
 
 ## Installation

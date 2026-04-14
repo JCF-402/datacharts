@@ -6,22 +6,7 @@ import zoomPlugin from "chartjs-plugin-zoom";
 
 import {PlotData,Data,LineProperties, findPossibleProperty} from "./parser"
 
-export const validLineProperties = [
-    "backgroundColor",
-    "borderCapStyle",
-    "borderColor",
-    "borderDash",
-    "borderDashOffset",
-    "borderJoinStyle",
-    "borderWidth",
-    "fill",
-    "tension",
-    "showLine",
-    "spanGaps",
-    "xrange",
-    "pointStyle",
-    "pointRadius"
-]
+import { validLineProperties } from "./plotProperties";
 
 type Dataset = {
     label: string,

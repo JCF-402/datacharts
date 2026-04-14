@@ -7,7 +7,7 @@ import { Notice, App, TFile} from "obsidian";
 import { getApp } from "./appContext";
 
 import { customNotice,isTuple } from "main";
-import { validLineProperties } from "./graphs";
+import { validLineProperties } from "./plotProperties";
 import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
@@ -67,16 +67,16 @@ export type parsedText = {
 
 const builtInConstants = ["e","E","pi","PI"];
 
-
+export const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
+const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
+const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
 
 
 
 
 export async function handleMarkdown(markdown: string, defaultProperties: ChartOptions<"line">): Promise<parsedText> {
     const lines = markdown.split("\n").filter(s => s !== "");
-    const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
-    const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
-    const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
+
 
     // something.property = value
     const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
