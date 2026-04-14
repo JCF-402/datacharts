@@ -6,6 +6,7 @@ import LinearScaleBase from "chart.js/dist/scales/scale.linearbase";
 import { index } from "mathjs";
 import { format } from "mathjs";
 import { filter } from "mathjs";
+import { ChartType } from "chart.js";
 
 
 export const myCompletions = {
@@ -70,7 +71,8 @@ export const validLineProperties = [
     "spanGaps",
     "xrange",
     "pointStyle",
-    "pointRadius"
+    "pointRadius",
+    "label",
 ]
 
 export const globalOptions = [
@@ -84,15 +86,15 @@ export const globalOptions = [
 
 ]
 
-const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*/;
+const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)?\s*/;
 
 
 type TreeNode = {
   [key: string]: TreeNode;
 };
 
-export function linePlotCompletionSource(settings: PlotPluginSettings) {
-    const chartTree = objectToTree(getDefaultPlotProperties(settings)); // Get default properties from main and create a tree object to travers
+export function linePlotCompletionSource(settings: PlotPluginSettings, chartType: ChartType) {
+    const chartTree = objectToTree(getDefaultPlotProperties(settings, chartType)); // Get default properties from main and create a tree object to travers
     return function(context: CompletionContext) {  // function that autocompletion accepts
         
         if (!inLineplotBlock(context)) return null; // if the text doesnt have ```lineplot at some point before, dont autocomplete. Couldnt get syntaxTree to work
@@ -132,7 +134,7 @@ export function linePlotCompletionSource(settings: PlotPluginSettings) {
                 options: validLineProperties.map(s => ({
                     label: s,
                     type: "function"
-                }))
+                })),
             }
         }
 
@@ -161,7 +163,7 @@ function inLineplotBlock(context: CompletionContext): boolean {
         const txt = context.state.doc.line(n).text.trim();
 
         if (txt.startsWith("```")) {
-            if (txt === "```lineplot") {
+            if (txt === "```lineplot" || "```barplot" || "```scatterplot") {
                 foundStart = true;
             }
             break;

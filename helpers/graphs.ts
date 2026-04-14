@@ -1,6 +1,6 @@
 
 
-import Chart, { ChartConfiguration } from "chart.js/auto";
+import Chart, { ChartConfiguration, ChartType } from "chart.js/auto";
 import zoomPlugin from "chartjs-plugin-zoom";
 
 
@@ -16,12 +16,12 @@ type Dataset = {
 
 Chart.register(zoomPlugin as any);
 
-export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartConfiguration<"line">["options"] ) {
+export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartConfiguration["options"], chartType: ChartType ) {
 
 
-    const datasets = buildDatasets(data,parsedMd)
+    const datasets = buildDatasets(data,parsedMd);
     return new Chart(canvas, {
-    type: "line",
+    type: chartType,
     data: {
         datasets: datasets},
     options: {

@@ -1,7 +1,7 @@
 
 import {create , all} from "mathjs";
 
-import type {ChartOptions, ChartConfiguration} from "chart.js/auto";
+import type {ChartOptions, ChartConfiguration, ChartType} from "chart.js/auto";
 import { Notice, App, TFile} from "obsidian";
 
 import { getApp } from "./appContext";
@@ -55,7 +55,7 @@ export type NestedEquations = {
 
 export type parsedText = {
     lineProperties: LineProperties[],
-    chartOptions: ChartOptions<"line">,
+    chartOptions: ChartConfiguration["options"],
     globalProperties: string[],
     equations: Equation[],
     nestedEquations: NestedEquations[],
@@ -74,28 +74,53 @@ const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
 
 
 
-export async function handleMarkdown(markdown: string, defaultProperties: ChartOptions<"line">): Promise<parsedText> {
+export async function handleMarkdown(markdown: string, defaultProperties: ChartConfiguration["options"], chartType: ChartType): Promise<parsedText> {
     const lines = markdown.split("\n").filter(s => s !== "");
 
+    switch (chartType) {
+        case "line":
+        case "scatter": {
+            const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
+            const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties); // Plot properties are "obj.property = value"
+            const globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global."))); // Global properties are global.
+            const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
+            const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
+            const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
+            const tableData = await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::")));
+            const parsedText: parsedText = {
+                lineProperties: lineProperties,
+                chartOptions: chartOptions,
+                globalProperties: globalOptions,
+                equations: equations,
+                nestedEquations: nestedEquations,
+                manualData: manualData,
+                tableData: tableData
+            }
+            return parsedText;
+        }
+        case "bar": {
+           return {
+             lineProperties: handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern),
+             chartOptions: handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties),
+             globalProperties: handleGlobalOptions(lines.filter(s => s.includes("global."))),
+             equations: [],
+             nestedEquations: [],
+             manualData: getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s))))),
+             tableData: await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::"))),
+           }
 
-    // something.property = value
-    const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
-    const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties); // Plot properties are "obj.property = value"
-    const globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global."))); // Global properties are global.
-    const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
-    const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
-    const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
-    const tableData = await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::")));
-    const parsedText: parsedText = {
-        lineProperties: lineProperties,
-        chartOptions: chartOptions,
-        globalProperties: globalOptions,
-        equations: equations,
-        nestedEquations: nestedEquations,
-        manualData: manualData,
-        tableData: tableData
+        }
+        default:
+            return {
+                lineProperties: [],
+                chartOptions: {},
+                globalProperties: [],
+                equations: [],
+                nestedEquations: [],
+                manualData: [],
+                tableData: [],
+            };
     }
-    return parsedText;
 }
 
 
@@ -207,8 +232,8 @@ export function handleLineProperties(lines: string[], pattern: RegExp): LineProp
     return lineProperties; // Returns an array of type LineProperties that contains all properties 
 }
 
-export function handlePlotProperties(lines: string[], defaultProperties: ChartOptions<"line">) {
-    const properties: ChartOptions<"line"> = defaultProperties;
+export function handlePlotProperties(lines: string[], defaultProperties: ChartConfiguration["options"]) {
+    const properties: ChartConfiguration["options"] = defaultProperties;
     lines.forEach(prop => {
         const [rawKey,value] = prop.split("=").map(s => s.trim()); // ["obj.scales.x.type","linear"]
         const key = rawKey?.replace("obj.",""); // obj.x.title -> scales.x.title
@@ -229,7 +254,7 @@ export function handlePlotProperties(lines: string[], defaultProperties: ChartOp
     return properties;
 }
 
-function helperPlotProperties(properties: ChartOptions<"line">, key: string, value: string) {
+function helperPlotProperties(properties: ChartConfiguration["options"], key: string, value: string) {
     const path = key.split("."); // scales.x.title -> [scales, x, title]
     let current: any = properties; // running copy of the properties. Any is needed because I am dynamically accessing a chartoptions
     // object that requires static keys. I am already checking if the properties are valid in handlePlotProperties

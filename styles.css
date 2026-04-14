@@ -55,3 +55,12 @@
 	box-shadow:none ;
 }
 
+.markdown-source-view.mod-cm6 
+.cm-preview-code-block.cm-lang-barplot:hover{
+	box-shadow:none ;
+}
+
+.markdown-source-view.mod-cm6 
+.cm-preview-code-block.cm-lang-scatterplot:hover{
+	box-shadow:none ;
+}

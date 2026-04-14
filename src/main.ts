@@ -5,10 +5,11 @@ import {Notice, Plugin} from "obsidian";
 import { apply } from "mathjs";
 import { setApp } from "../helpers/appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
-import { ChartConfiguration } from "chart.js/auto";
+import { ChartConfiguration, ChartOptions, ChartType, Ticks } from "chart.js/auto";
 import {autocompletion} from "@codemirror/autocomplete";
-import {EditorView} from "@codemirror/view";
+
 import { linePlotCompletionSource } from "../helpers/plotProperties";
+import { zoom } from "chartjs-plugin-zoom";
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
@@ -20,7 +21,7 @@ export default class PlotPlugin extends Plugin {
 
 		this.registerEditorExtension([
 			autocompletion({
-				override: [linePlotCompletionSource(this.settings)],
+				override: [linePlotCompletionSource(this.settings,"line")],
 				activateOnTyping: true,
 			})]
 		)
@@ -30,10 +31,10 @@ export default class PlotPlugin extends Plugin {
 		setApp(this.app); // Sets current app as the working app to use globally. 
 		this.registerMarkdownCodeBlockProcessor("lineplot", 
 			async (source: string, el: HTMLElement) => { // Runs whenever a codeblock with the "lineplot" identifier is edited.
-			const defaultProperties: ChartConfiguration<"line">["options"] = getDefaultPlotProperties(this.settings);
+			const defaultProperties: ChartOptions<ChartType> = getDefaultPlotProperties(this.settings,"line");
 			const sourcePaths = getSourcePaths(source); // Gets any source:: item from path PATHS. Stores them for comparisons later.
 			if (defaultProperties === undefined) return;
-			let cachedParsedText = await handleMarkdown(source,defaultProperties); // Evaluates all the markdown in the codeblock and creates a ParsedText type object.
+			let cachedParsedText = await handleMarkdown(source,defaultProperties,"line"); // Evaluates all the markdown in the codeblock and creates a ParsedText type object.
 
 			let globalXRange = checkGlobalRange(cachedParsedText) // Gets the global range for the current codeblock. This is because the plot might have a global definition of the xrange.
 			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalXRange) ? globalXRange : [-10,10,0.1]); //Evaluates all expressions, if any, inside the codeblock.
@@ -50,17 +51,6 @@ export default class PlotPlugin extends Plugin {
 					...parsedText.manualData, // Manual data is updated per codeblock modification but I expect it will be small amounts of data. (Or your crazy tbh)
 					...parsedText.tableData // Will always be the latest table data stored in the cache.
 					]
-					/*
-					// Detect scale type depending on type of data. For example ChartJs works best as category for an x axis like 
-					// x = [January, February, etc]
-					if (parsedText.chartOptions.scales !== undefined && parsedText.chartOptions.scales.x !== undefined) {
-							parsedText.chartOptions.scales.x.type = declareScalesType(data,"x") ?? "linear";
-						}
-					if (parsedText.chartOptions.scales !== undefined && parsedText.chartOptions.scales.y !== undefined) {
-							parsedText.chartOptions.scales.y.type = declareScalesType(data,"y") ?? "linear";
-						}
-							*/
-
 
 					//console.log(JSON.stringify(parsedText.chartOptions, null, 2));
 					//console.log(data);
@@ -83,7 +73,7 @@ export default class PlotPlugin extends Plugin {
 						height: `${this.settings.canvasHeight}px`
 					})
 
-					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions); // Chart is created. 
+					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions,"line"); // Chart is created. 
 					this.charts.add(chartInstance);
 
 				} else { // If the chart does exist only update it when a table it references is updated.
@@ -113,15 +103,113 @@ export default class PlotPlugin extends Plugin {
 		}
 	);
 
-		this.registerMarkdownCodeBlockProcessor("bases", (source: string, el: HTMLElement) => { // Later feature
-			// This is for some other time
-			const canvas = document.createElement("canvas"); 
+		this.registerMarkdownCodeBlockProcessor("barplot", async (source: string, el: HTMLElement) => { 
+			const defaultProperties: ChartOptions<ChartType> = getDefaultPlotProperties(this.settings,"bar");
+			const sourcePaths = getSourcePaths(source);
+			let cachedParsedText = await handleMarkdown(source,defaultProperties,"bar");
 
-			el.appendChild(canvas);
+			let chartInstance: any = undefined;
+
+			const renderPlot = async () => {
+				const parsedText = cachedParsedText;
+				const data: PlotData[] = [
+					...parsedText.manualData,
+					...parsedText.tableData
+				]
+
+				if (!chartInstance) {
+					const wrapper = el.createDiv("plot-wrapper");
+
+					wrapper.setCssProps({
+						"--wrapper-height": `${this.settings.canvasHeight}px`,
+						"--wrapper-padding": `${this.settings.canvasPadding}px`,
+						"--wrapper-borderRadius": `${this.settings.canvasRadius}px`,
+						"--wrapper-margin": `${this.settings.marginY}px 0px`,
+						"--wrapper-background": this.settings.transparentBackground ? "transparent" : "var(--background-secondary)",
+						"--wrapper-border":  this.settings.showBorder ? "none" : "1px solid var(--background-modifier-border)"
+					})
+					const canvas = wrapper.createEl("canvas"); 
+					canvas.setCssProps({
+						width: "100%",
+						height: `${this.settings.canvasHeight}px`
+					})
+					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions,"bar"); // Chart is created. 
+					this.charts.add(chartInstance);
+				} else {
+					chartInstance.data.datasets = buildDatasets(data,parsedText.lineProperties); 
+					chartInstance.update();					
+				}
+			};
+			await renderPlot();
+
+			this.registerEvent( // Register event 
+				this.app.vault.on("modify", async (file) => { 
+					if (!sourcePaths.includes(file.path)) return;
+					const updateTableData = await handleTableData(source.split("\n").filter(s => s.includes("source(") && s.includes("::")));
+					cachedParsedText.tableData = updateTableData; // Updates stored tableData
+					await renderPlot();
+				}))
+
+		});
+
+		this.registerMarkdownCodeBlockProcessor("scatterplot", 
+			async (source: string, el: HTMLElement) => { 
+			const defaultProperties: ChartOptions<ChartType> = getDefaultPlotProperties(this.settings,"scatter");
+			const sourcePaths = getSourcePaths(source); 
+			if (defaultProperties === undefined) return;
+			let cachedParsedText = await handleMarkdown(source,defaultProperties,"scatter"); 
+
+			let globalXRange = checkGlobalRange(cachedParsedText) 
+			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalXRange) ? globalXRange : [-10,10,0.1]); 
+			let chartInstance: any = undefined; 
+
+			const renderPlot = async () => { 
+				const parsedText = cachedParsedText; 
+
+					const data: PlotData[] = [
+					...cachedEquationData, // equations are only computed once for optimization reasons.
+					...parsedText.manualData, // Manual data is updated per codeblock modification but I expect it will be small amounts of data. (Or your crazy tbh)
+					...parsedText.tableData // Will always be the latest table data stored in the cache.
+					]
 
 
-			return;
-		})
+				if (!chartInstance) { 		
+					const wrapper = el.createDiv("plot-wrapper");
+
+					wrapper.setCssProps({
+						"--wrapper-height": `${this.settings.canvasHeight}px`,
+						"--wrapper-padding": `${this.settings.canvasPadding}px`,
+						"--wrapper-borderRadius": `${this.settings.canvasRadius}px`,
+						"--wrapper-margin": `${this.settings.marginY}px 0px`,
+						"--wrapper-background": this.settings.transparentBackground ? "transparent" : "var(--background-secondary)",
+						"--wrapper-border":  this.settings.showBorder ? "none" : "1px solid var(--background-modifier-border)"
+					})
+					const canvas = wrapper.createEl("canvas"); 
+					canvas.setCssProps({
+						width: "100%",
+						height: `${this.settings.canvasHeight}px`
+					})
+
+					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions,"scatter"); // Chart is created. 
+					this.charts.add(chartInstance);
+
+				} else { 
+					chartInstance.data.datasets = buildDatasets(data,parsedText.lineProperties); 
+					chartInstance.update();
+				}	
+			};
+
+			await renderPlot(); 
+			this.registerEvent( 
+				this.app.vault.on("modify", async (file) => { 
+					if (!sourcePaths.includes(file.path)) return; 
+					const updateTableData = await handleTableData(source.split("\n").filter(s => s.includes("source(") && s.includes("::")));
+					cachedParsedText.tableData = updateTableData; 
+					await renderPlot(); 
+				})
+			);
+		}
+	);
 	}
 
 	onunload(): void {
@@ -153,7 +241,14 @@ export default class PlotPlugin extends Plugin {
 	
 }
 
-
+function isEmpty(obj: object): boolean {
+	for (const key in obj) {
+		if (Object.prototype.hasOwnProperty.call(obj,key)) {
+			return false;
+		}
+	}
+	return true;
+}
 
 
 export function isTuple(arr: number[]): arr is [number, number, number] {
@@ -209,121 +304,92 @@ export function customNotice(msg: string, cls = "", timeout = 4000) {
     });
 }
 
-export function getDefaultPlotProperties(settings: PlotPluginSettings): ChartConfiguration<"line">["options"] {
+export function getDefaultPlotProperties(settings: PlotPluginSettings, chartType: ChartType): ChartOptions<ChartType> {
+	return {
+		...getBaseDefaults(settings),
+		...getTypeDefaults(chartType,settings)
+	};
+}
+
+export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettings): ChartOptions<ChartType> {
 		const style = getComputedStyle(document.body);
 		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
-	return  {
+	switch (chartType) {
+		case "line" :
+			return {
+				elements: {
+					line: { borderWidth: settings.EborderWidth, tension: 0.15, fill: false},
+					point: {radius: settings.pointRadius, hoverRadius: 4, hitRadius: 6, pointStyle: "circle"},
+				},
+				scales: {
+					x: {type: settings.xScalesType, display: true, 
+						grid: {display: true}, 
+						ticks: {display: true, font: {family: fontFamily, size: 11}},
+						title: {display: settings.titleStatus, text: ""}
+					},
+					y: {type: settings.xScalesType, display: true, 
+						grid: {display: true}, 
+						ticks: {display: true, font: {family: fontFamily, size: 11}},
+						title: {display: settings.titleStatus, text: ""}
+					},
+				}
+			}
+		case "scatter":
+			return {
+				elements: {
+					line: { borderWidth: settings.EborderWidth, tension: 0.15, fill: false},
+					point: {radius: settings.pointRadius, hoverRadius: 4, hitRadius: 6, pointStyle: "circle"},
+				},
+				scales: {
+					x: {type: "linear", display: true, 
+						grid: {display: true}, 
+						ticks: {display: true, font: {family: fontFamily, size: 11}},
+						title: {display: settings.titleStatus, text: ""}
+					},
+					y: {type: "linear", display: true, 
+						grid: {display: true}, 
+						ticks: {display: true, font: {family: fontFamily, size: 11}},
+						title: {display: settings.titleStatus, text: ""}
+					},
+				}
+			}
+		case "bar": 
+			return {
+				elements: {
+					bar: {borderWidth: settings.EborderWidth, borderRadius: 4}
+				},
+				scales: {
+					x: {type: settings.xScalesType},
+					y: {type: settings.yScalesType}
+				}
+			};
+
+		default:
+			return {};		
+	}
+}
+
+export function getBaseDefaults(settings: PlotPluginSettings): ChartOptions<ChartType> {
+	const style = getComputedStyle(document.body);
+	const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
+	return {
 		responsive: true,
 		maintainAspectRatio: false,
 		animation: false,
-		interaction: {
-			mode: "nearest",
-			intersect: false
-		},
-		layout: {
-			padding: 8
-		},
+		interaction: {mode:"nearest",intersect: false},
+		layout: {padding: 8},
 		plugins: {
-			legend: {
-				display: settings.legendStatus,
-				position: "right",
-				labels: {
-					boxWidth: 5,
-					boxHeight: 5,
-					padding: 14,
-					usePointStyle: true,
-					font: {
-						family: fontFamily,
-						size: 12
-					}
-				}
+			legend: {display: settings.legendStatus, position: "right", 
+						labels: {boxWidth: 5, boxHeight: 5, padding: 14, usePointStyle: true, 
+							font: {family: fontFamily, size: 12}
+						},
 			},
-			zoom: {
-				
-				pan: {
-					enabled: settings.zoomStatus ? false : true,
-					mode: "xy"
-				},
-				zoom: {
-					wheel: {
-						enabled: settings.zoomStatus ? false : true,
-					},
-					pinch: {
-						enabled: settings.zoomStatus ? false : true,
-					},
-					mode: "xy"
-				}
+			zoom: {pan: {enabled: settings.zoomStatus ? false :true , mode: "xy"}, 
+				   zoom: {wheel: {enabled: settings.zoomStatus ? false : true}, 
+							pinch: {enabled: settings.zoomStatus ? false : true}, mode: "xy"}
 			},
-			title: {
-				display: settings.titleStatus,
-				font: {
-					family: fontFamily,
-					size: 13,
-					weight: 600
-				}
-			},
-			tooltip: {
-				enabled: true,
-				padding: 10,
-				cornerRadius: 8
-			},
-			
-		},
-		elements: {
-			line: {
-				borderWidth: settings.EborderWidth,
-				tension: 0.15,
-				fill: false,
-			},
-
-			point: {
-				radius: settings.pointRadius,
-				hoverRadius: 4,
-				hitRadius: 6,
-				pointStyle: "circle"
-			}
-		},
-
-		scales: {
-			x: {
-				type: settings.xScalesType,
-
-				display: true,
-
-				grid: {
-					display: true
-				},
-
-				ticks: {
-					display: true,
-					font: {
-						family: fontFamily,
-						size: 11
-					}
-				},
-
-				title: {
-					display: settings.titleStatus,
-					text: ""
-				}
-			},
-
-			y: {
-				type: settings.yScalesType,
-				display: true,
-
-				grid: {
-					display: true
-				},
-
-				ticks: {
-					display: true
-				},
-
-				title: {
-					display: settings.titleStatus,
-					text: ""
-				}}}};
-				
-	
+			title: {display: settings.titleStatus, font: {family: fontFamily, size: 13, weight: 600}},
+			tooltip: {enabled: true, padding: 10, cornerRadius: 8}
 		}
+	};
+}
