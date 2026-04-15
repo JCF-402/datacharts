@@ -47,6 +47,7 @@ Found a bug or have an idea? Open a GitHub Issue.
 ## 1.0.1
 
 - Added a simple autocomplete feature for properties.
+
 ![Autocomplete][assets/autocomplete.gif]
 
 
