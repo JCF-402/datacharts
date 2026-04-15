@@ -12,6 +12,7 @@ import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
 import {validPlotProperties,validRoots} from "./plotProperties"
+import { sign } from "mathjs";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
@@ -53,10 +54,15 @@ export type NestedEquations = {
     signature: string 
 }
 
+export type GlobalProperties = {
+    expr: string,
+    signature: string;
+}
+
 export type parsedText = {
     lineProperties: LineProperties[],
     chartOptions: ChartConfiguration["options"],
-    globalProperties: string[],
+    globalProperties: GlobalProperties[],
     equations: Equation[],
     nestedEquations: NestedEquations[],
     manualData: PlotData[]
@@ -74,15 +80,15 @@ const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
 
 
 
-export async function handleMarkdown(markdown: string, defaultProperties: ChartConfiguration["options"], chartType: ChartType): Promise<parsedText> {
-    const lines = markdown.split("\n").filter(s => s !== "");
+export async function handleMarkdown(markdown: string[], defaultProperties: ChartConfiguration["options"], chartType: ChartType): Promise<parsedText> {
+    const lines = markdown.filter(s => s !== "");
 
     switch (chartType) {
         case "line":
         case "scatter": {
             const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
             const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties); // Plot properties are "obj.property = value"
-            const globalOptions = handleGlobalOptions(lines.filter(s => s.includes("global."))); // Global properties are global.
+            const globalOptions = handleGlobalOptions(lines.filter(s => s.startsWith("global."))); // Global properties are global.
             const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
             const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
             const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
@@ -281,8 +287,15 @@ function parseValue(value: string) {
     return value;
 }
 
-export function handleGlobalOptions(lines: string[]) {
-    return lines.filter(s => s.includes("global."));
+export function handleGlobalOptions(lines: string[]): GlobalProperties[] {
+    const globalProperties: GlobalProperties[] = lines.map(s => {
+        let arr = s.replace(" ","").split("="); // [global.property, value]
+        const expr = arr[1];
+        const signature = arr[0]?.split(".")[1];
+        if (expr === undefined || signature === undefined) return {expr: "", signature: ""};
+        return {expr:expr,signature: signature };
+    })
+    return globalProperties;
 }
 
 export function handleEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
@@ -508,34 +521,45 @@ export async function handleTableData(lines: string[]) {
     const app = getApp();
     const results = [];
 	for (let line of lines) {
-
-		let [signature, expr] = line.split("::"); // [source(name), table from "path"]
+        // Syntax is source(dataLabel) :: tableSelector[col1,col2] is table from path
+		let [signature, expr] = line.split("::"); // [source(name), tableSelector[] is table from "path"]
 
 		if (!signature || !expr) continue;
+        if (!line.includes("is")) {
+            customNotice(`Missing syntax key: is on source`,"notice-error",5000);
+            continue;
+        }
+        if (!line.includes("from")) {
+            customNotice(`Missing syntax key: from on source`,"notice-error",5000);
+        }
 
-		const tableTitle =  signature.replace("source","").replace("(","").replace(")","").trim();
-    	signature = tableTitle;
-		if (expr.includes("table")) {
+        const info = expr.split(/ is | from /); // [tableSelector, table, path]
+		const name =  signature.replace("source","").replace("(","").replace(")","").trim();
+    	signature = name;
+        if (!info[0]) {
+            customNotice(`Cannot find TableName for ${signature}`,'notice-error',5000);
+            continue;
+        }
+        const sourceInfo = info[0];
+		if (info[1] === "table") {
 
-			const path = expr.replace("table","").replace("from","").trim() + ".md";
+			const path = info[2]?.trim() + ".md";
             const file = app.vault.getAbstractFileByPath(path);
             if (file instanceof TFile) {
 
                 const markdown = await app.vault.cachedRead(file);
-                results.push(extractTable(markdown, signature));
+                results.push(extractTable(markdown, signature, sourceInfo));
             }
 
 
-		}
-
-		
+        }	
 
 	}
     return results;
 }
 
 
-function extractTable(markdown: string, signature: string) {
+function extractTable(markdown: string, signature: string, sourceInfo: string) {
     const lines = markdown.split("\n");
     const data: Data[] = [];
     let tableStart = true;
@@ -545,15 +569,14 @@ function extractTable(markdown: string, signature: string) {
     let col2: string | number | undefined = undefined;
     let col1Index: number | undefined = undefined;
     let col2Index: number | undefined = undefined;
-
+    let tableTitle = sourceInfo;
     // Right here the signature can still be something like name[column1,column2]
-    if (signature.endsWith("]")) {
-        const nameAndColumns = signature.split("["); // [name, [column1,column2] ]
+    if (sourceInfo.endsWith("]")) {
+        const nameAndColumns = sourceInfo.split("["); // [name, [column1,column2] ]
         if (nameAndColumns[0] === undefined || nameAndColumns[1] === undefined) {
-            signature = "name-error";
-            // Throw notice here better. 
+            customNotice(`${signature} column names aren't defined`, "notice-warning",5000);
         } else {
-        signature = nameAndColumns[0]
+        tableTitle = nameAndColumns[0]
         const columns = nameAndColumns[1].replace("]","").split(",");
         col1 = isNaN(Number(columns[0])) ? columns[0] : Number(columns[0]);
         col2 = isNaN(Number(columns[1])) ? columns[1] : Number(columns[1]);
@@ -563,10 +586,14 @@ function extractTable(markdown: string, signature: string) {
         if (typeof col1 === "number") col1Index = col1;
         if (typeof col2 === "number") col2Index = col2;
 
+
+
     }
+     let warnedCol1 = false;
+    let warnedCol2 = false;
 
     for (let line of lines) {
-        if (line.startsWith("|") && line.includes(signature) && tableStart) { // Right table found
+        if (line.startsWith("|") && line.includes(tableTitle) && tableStart) { // Right table found
             tableStart = false; // Registers start of table only once per search
             continue;
         }
@@ -588,7 +615,7 @@ function extractTable(markdown: string, signature: string) {
                 if (col1 !== undefined && typeof col1 === "string") {
                     // Column 1 is a string
                     if (!headers.includes(col1)) {
-                        customNotice(`${col1} does not match any ${signature} table header`,"notice-warning",5000);
+                        customNotice(`${col1} does not match any ${tableTitle} table header`,"notice-warning",5000);
                         continue;
                     }
                     // If it does match a known header. Find the index it matches 
@@ -596,7 +623,7 @@ function extractTable(markdown: string, signature: string) {
                 }
                 if (col2 !== undefined && typeof col2 === "string") {
                     if (!headers.includes(col2)) {
-                        customNotice(`${col2} does not match any ${signature} table header`,"notice-warning", 5000);
+                        customNotice(`${col2} does not match any ${tableTitle} table header`,"notice-warning", 5000);
                         continue;
                     }
                     col2Index = headers.indexOf(col2);
@@ -606,11 +633,26 @@ function extractTable(markdown: string, signature: string) {
             if (line.startsWith("|") && currentRow > 3) {
                 let arr = line.split("|").map(s => s.trim()).filter(s => s !== "");
                 if (arr.length < 2) continue;
+
                 if (col1Index === undefined || col2Index === undefined) { // Default to using the first two columns
                     const x = isNaN(Number(arr[0])) ? arr[0] : Number(arr[0]);
                     const y = isNaN(Number(arr[1])) ? arr[1] : Number(arr[1]);
                     data.push({x: x ?? "", y: y ?? ""});
                 } else  {
+                    if (col1Index > arr.length -1) {
+                        if (!warnedCol1) {
+                        customNotice(`${col1Index} exceeds table size`,"notice-error",5000);
+                        warnedCol1 = true;
+                        }
+                        continue;
+                    }
+                    if (col2Index > arr.length - 1) {
+                        if (!warnedCol2) {
+                        customNotice(`${col2Index} exceeds table size`,"notice-error",5000);
+                        warnedCol2 = true;
+                        }
+                        continue;
+                    }
                     const x = arr[col1Index];
                     const y = arr[col2Index];
                     data.push({x: x ?? "", y: y ?? ""});

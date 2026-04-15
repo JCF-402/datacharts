@@ -9,17 +9,6 @@ import { filter } from "mathjs";
 import { ChartType } from "chart.js";
 
 
-export const myCompletions = {
-    "obj.": [
-        {label: "plugins", type: "property", info: "Chart plugins"},
-        {label: "scales", type: "property", info: "Axis settings"},
-        {label: "elements",type: "property",info: "Line settings"},
-        {label: "animations",type: "property",info: "Animation settings"},
-        {label: "interaction",type: "property",info: "Interaction settings"}
-    ],
-}
-
-
 export const validRoots = [
     "plugins",
     "scales",
@@ -84,6 +73,10 @@ export const globalOptions = [
     "canvasMargin",
     "canvasPadding"
 
+]
+
+export const barStyleProperties = [
+    "backgroundColor"
 ]
 
 const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)?\s*/;
@@ -163,7 +156,7 @@ function inLineplotBlock(context: CompletionContext): boolean {
         const txt = context.state.doc.line(n).text.trim();
 
         if (txt.startsWith("```")) {
-            if (txt === "```lineplot" || "```barplot" || "```scatterplot") {
+            if (txt === "```datachart") {
                 foundStart = true;
             }
             break;

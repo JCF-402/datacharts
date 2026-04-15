@@ -1,7 +1,7 @@
 import { PluginSettingTab, App, Setting, DropdownComponent } from "obsidian";
 import PlotPlugin from "main"
 
-type ScaleType = "linear" | "category" | "logarithmic" | "time";
+type ScaleType = "linear" | "category" | "logarithmic";
 
 export interface PlotPluginSettings {
     canvasHeight: number;
@@ -21,6 +21,7 @@ export interface PlotPluginSettings {
     legendStatus: boolean;
     xScalesType: ScaleType;
     yScalesType: ScaleType;
+	saveImagesPath: string;
 }
 
 export const DEFAULT_SETTINGS: PlotPluginSettings = {
@@ -39,7 +40,8 @@ export const DEFAULT_SETTINGS: PlotPluginSettings = {
     transparentBackground: true,
     backgroundColor: "var(--background-secondary)",
 	titleStatus: false,
-	zoomStatus: true
+	zoomStatus: true,
+	saveImagesPath: "Attachments/Charts/"
 }
 
 
@@ -60,6 +62,7 @@ export class PlotSettingTab extends PluginSettingTab {
 
         const plot = this.makeSection(containerEl,"Plot Defaults",true);
 		const advanced = this.makeSection(containerEl,"Advanced",true);
+		const images = this.makeSection(containerEl,"Images",true);
 		/*
         new Setting(appearance)
         .setName("Use Theme Colors")
@@ -140,6 +143,33 @@ export class PlotSettingTab extends PluginSettingTab {
                 })
             );
 
+			new Setting(appearance)
+			.setName("Canvas background")
+			.addText(text => text
+					.setPlaceholder("var(--background-secondary)")
+					.setValue(this.plugin.settings.backgroundColor)
+					.onChange(async (value) => {
+						this.plugin.settings.backgroundColor = value;
+						await this.plugin.saveSettings();
+					})
+				)
+			.addColorPicker(color => color
+				.setValue(this.plugin.settings.backgroundColor)
+				.onChange( async (value) => {
+					this.plugin.settings.backgroundColor = value;
+					await this.plugin.saveSettings();
+				}))
+
+				.addExtraButton(btn => btn
+					.setIcon("reset")
+					.setTooltip("Reset")
+					.onClick(async () => {
+						this.plugin.settings.backgroundColor = DEFAULT_SETTINGS.backgroundColor;
+						await this.plugin.saveSettings();
+						this.display;
+					})
+				)
+
             new Setting(appearance) 
 			.setName("Don't show border")
 			.setDesc("Controls if canvas border shows.")
@@ -173,6 +203,25 @@ export class PlotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			)
+			new Setting(images)
+			.setName("Save image path")
+			.setDesc("Default path for saving charts as PNG or SVG. Defaults to Attachments/Charts/")
+			.addText(text => text
+				.setPlaceholder(this.plugin.settings.saveImagesPath)
+				.setValue(this.plugin.settings.saveImagesPath)
+				.onChange(async (value) => {
+					this.plugin.settings.saveImagesPath = value
+					await this.plugin.saveSettings();
+				}))
+				.addExtraButton(btn => btn
+					.setIcon("reset")
+					.setTooltip("Reset")
+					.onClick(async () => {
+						this.plugin.settings.saveImagesPath = DEFAULT_SETTINGS.saveImagesPath;
+						await this.plugin.saveSettings();
+						this.display;
+					})
+				);
        
 
 	}
@@ -295,7 +344,6 @@ const plotSchema: PlotSettingSchema[] = [
 			linear: "Linear",
 			category: "Category",
 			logarithmic: "Logarithmic",
-			time: "Time"
 		}
 	},
 	{
@@ -307,14 +355,13 @@ const plotSchema: PlotSettingSchema[] = [
 			linear: "Linear",
 			category: "Category",
 			logarithmic: "Logarithmic",
-			time: "Time"
 		}
 	},
 	{
 		type: "toggle",
 		key: "titleStatus",
-		name: "Display Ttiles",
-		desc: "If on titles will always be displayed. Meaning you don't have to use obj.plugins.title.display = true \n Kept false as default for tidiness."
+		name: "Don't display titles",
+		desc: "If on titles will not display unless you explicitly set them to true. Example: obj.plugins.title.display = true"
 	},
 	{
 		type: "number",
@@ -336,69 +383,3 @@ const plotSchema: PlotSettingSchema[] = [
 	}
 ];
 
-
- /*
-        new Setting(plot)
-            .setName("X Scale Type")
-			.setDesc("Scale type for the x axis. Linear works well for numerical values. \n categorical for stuff like dates, strings, etc.")
-			.addText(text => text
-				.setPlaceholder('linear')
-				.setValue(String(this.plugin.settings.xScalesType))
-				.onChange(async (value) => {
-					this.plugin.settings.xScalesType = String(value) || DEFAULT_SETTINGS.xScalesType;
-					await this.plugin.saveSettings();
-
-				}))
-            .addExtraButton(btn => btn
-                .setIcon("reset")
-                .setTooltip("Reset")
-                .onClick(async () => {
-                    this.plugin.settings.xScalesType = DEFAULT_SETTINGS.xScalesType;
-                    await this.plugin.saveSettings();
-
-                    this.display()
-                })
-            );
-        new Setting(plot)
-            .setName("Line Width")
-			.setDesc("Default line thickness")
-			.addText(text => text
-				.setPlaceholder('2')
-				.setValue(String(this.plugin.settings.EborderWidth))
-				.onChange(async (value) => {
-					this.plugin.settings.EborderWidth = Number(value) || DEFAULT_SETTINGS.EborderWidth;
-					await this.plugin.saveSettings();
-
-				}))
-            .addExtraButton(btn => btn
-                .setIcon("reset")
-                .setTooltip("Reset")
-                .onClick(async () => {
-                    this.plugin.settings.EborderWidth = DEFAULT_SETTINGS.EborderWidth;
-                    await this.plugin.saveSettings();
-
-                    this.display()
-                })
-            );
-        new Setting(plot)
-            .setName("Legend Status")
-			.setDesc("Legend does not appear by default")
-			.addText(text => text
-				.setPlaceholder('false')
-				.setValue(String(this.plugin.settings.legendStatus))
-				.onChange(async (value) => {
-					this.plugin.settings.legendStatus = Boolean(value) || DEFAULT_SETTINGS.legendStatus;
-					await this.plugin.saveSettings();
-
-				}))
-            .addExtraButton(btn => btn
-                .setIcon("reset")
-                .setTooltip("Reset")
-                .onClick(async () => {
-                    this.plugin.settings.legendStatus = DEFAULT_SETTINGS.legendStatus;
-                    await this.plugin.saveSettings();
-
-                    this.display()
-                })
-            );
-        */

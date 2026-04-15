@@ -47,20 +47,12 @@
 }
 .plot-wrapper canvas{
 	display:block;
-	width:100% 
+	width:100% ;
+	background: var(--canvas-backround);
 }
 
 .markdown-source-view.mod-cm6 
-.cm-preview-code-block.cm-lang-lineplot:hover{
+.cm-preview-code-block.cm-lang-datachart:hover{
 	box-shadow:none ;
 }
 
-.markdown-source-view.mod-cm6 
-.cm-preview-code-block.cm-lang-barplot:hover{
-	box-shadow:none ;
-}
-
-.markdown-source-view.mod-cm6 
-.cm-preview-code-block.cm-lang-scatterplot:hover{
-	box-shadow:none ;
-}
