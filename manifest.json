@@ -1,7 +1,7 @@
 {
 	"id": "datacharts",
 	"name": "DataCharts",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.12.7",
 	"description": "Create charts and visualize data directly inside notes.",
 	"author": "DonutCar Fountains",

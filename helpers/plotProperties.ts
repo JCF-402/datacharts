@@ -123,6 +123,12 @@ export const validBarDatasetProperties = [
 const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)?\s*/;
 
 const propertyDescriptions: Record<string,string> = {
+
+    // roots
+    elements: "Controls style options for all datasets",
+    interactions: "Controls options for mouse interactions with chart.",
+    layout: "Controls the chart layout options.",
+    // global
     xrange: "Controls the range for evaluating a main equation.",
     canvasWidth: "Controls the chart width in pixels.",
     canvasHeight: "Controls the chart height in pixels.",
@@ -151,6 +157,7 @@ const propertyDescriptions: Record<string,string> = {
     pointHoverRadius: "Controls point size while hovered.",
     pointHitRadius: "Controls clickable area around points.",
     pointStyle: "Controls point shape.",
+    padding: "The padding to add inside the chart.",
     radius: "Controls radius of arcs, bubbles, or points.",
     hoverRadius: "Controls radius while hovered.",
     hoverOffset: "Moves pie or doughnut slices outward on hover.",

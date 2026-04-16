@@ -28,11 +28,12 @@ Manually place the plugin files in your vault's `.obsidian/plugins/datacharts` f
 - manifest.json
 
 ## Roadmap
+
 - Improve stability from user feedback.
-- Query vault data through Bases / Datacore.
-- Add bar, scatter, pie, and other chart types.
+- Query vault data through Bases / Datacore / Custom syntax.
+- Polish existing chart support. 
 - Expand equation parsing and custom math syntax.
-- Add functionality to save or export plot as images. 
+- Add to export chart/note as PNG and SVG to file location.
 
 
 ## Issues
@@ -42,16 +43,24 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 ## Changelog
 
+### 1.0.2
 
+- Changed ```lineplot``` to ```datachart```. 
+- Introduced `type :: chartType` for defining plot type.
+- Added bar and scatter chart support. 
+- Added pie, doughnut, polarArea and radar chart support. (Work but need polish).
+- Changed syntax for `source::` read new documentation at https://datacharts-docs.vercel.app/. 
+- Added option to save chart to vault as PNG by right clicking on the chart. 
+- Added option to save chart to vaul as SVG (limited to line charts only right now)
 
-## 1.0.1
+### 1.0.1
 
 - Added a simple autocomplete feature for properties.
 
 ![Autocomplete][assets/autocomplete.gif]
 
 
-## 1.0.0
+### 1.0.0
 
 - Initial release
 - Function plotting

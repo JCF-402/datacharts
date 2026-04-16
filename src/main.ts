@@ -1,7 +1,7 @@
 
 import {handleMarkdown, handleGlobalOptions, evaluateExpressions, PlotData, parsedText, handleTableData, Equation, GlobalProperties,Data} from "../helpers/parser"
 import { createPlot, buildDatasets} from "../helpers/graphs";
-import {Menu, Notice, Plugin, TextAreaComponent} from "obsidian";
+import {Menu, Notice, Plugin, MarkdownView} from "obsidian";
 import { apply } from "mathjs";
 import { setApp } from "../helpers/appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
@@ -77,11 +77,10 @@ export default class PlotPlugin extends Plugin {
 			this.registerEvent( // Register event 
 				this.app.vault.on("modify", async (file) => { // where the event is a modification of the file
 					if (!sourcePaths.includes(file.path)) return; // Only goes through if the file that is modified belongs to the codeblocks sourcepaths
-
 					// So the file that was modified is part of the source for the current codeblocks data. We need to updated the table data.
-					// It hands the new markdown text to handleTableData which parses it for all tables.
+					
 
-					await refreshTableData(); 
+					await refreshTableData(); // It hands the new markdown text to handleTableData which parses it for all tables.
 					await renderCurrentChart();
 
 				})
@@ -109,9 +108,12 @@ export default class PlotPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	refreshPlots() {
-		this.app.workspace.updateOptions();
-	}
+	async refreshOpenCharts() {
+  	this.app.workspace.getLeavesOfType("markdown").forEach(async (leaf) => {
+    const view = leaf.view as MarkdownView;
+    view.previewMode?.rerender(true);
+  });
+}
 
 	getChartTypes(markdown: string[]): ChartType {
 		const lines = markdown;
@@ -178,7 +180,6 @@ export default class PlotPlugin extends Plugin {
 			...parsedText.manualData,
 			...parsedText.tableData
 		]
-		console.log(data);
 		// Manage data to fit how pie and others accept it. 
 		return await this.createChartInstane(chartInstance, el, globalProperties, data, parsedText, chartType);
 	};
