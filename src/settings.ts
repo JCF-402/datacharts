@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: PlotPluginSettings = {
     showBorder: true,
     transparentBackground: true,
     backgroundColor: "var(--background-secondary)",
-	titleStatus: false,
+	titleStatus: true,
 	zoomStatus: true,
 	saveImagesPath: "Attachments/Charts/"
 }
@@ -166,7 +166,7 @@ export class PlotSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.plugin.settings.backgroundColor = DEFAULT_SETTINGS.backgroundColor;
 						await this.plugin.saveSettings();
-						this.display;
+						this.display();
 					})
 				)
 
@@ -219,7 +219,7 @@ export class PlotSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.plugin.settings.saveImagesPath = DEFAULT_SETTINGS.saveImagesPath;
 						await this.plugin.saveSettings();
-						this.display;
+						this.display();
 					})
 				);
        
@@ -360,8 +360,8 @@ const plotSchema: PlotSettingSchema[] = [
 	{
 		type: "toggle",
 		key: "titleStatus",
-		name: "Don't display titles",
-		desc: "If on titles will not display unless you explicitly set them to true. Example: obj.plugins.title.display = true"
+		name: "Display titles",
+		desc: "Show titiles by default"
 	},
 	{
 		type: "number",

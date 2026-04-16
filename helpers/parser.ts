@@ -7,11 +7,11 @@ import { Notice, App, TFile} from "obsidian";
 import { getApp } from "./appContext";
 
 import { customNotice,isTuple } from "main";
-import { validLineProperties } from "./plotProperties";
+import { validLineDatasetProperties,validBarDatasetProperties } from "./plotProperties";
 import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
-import {validPlotProperties,validRoots} from "./plotProperties"
+import {validObjProperties,validRoots} from "./plotProperties"
 import { sign } from "mathjs";
 
 const math = create(all);
@@ -104,7 +104,11 @@ export async function handleMarkdown(markdown: string[], defaultProperties: Char
             }
             return parsedText;
         }
-        case "bar": {
+        case "bar":
+        case "pie":
+        case "doughnut":
+        case "polarArea":
+        case "radar": {
            return {
              lineProperties: handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern),
              chartOptions: handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties),
@@ -246,12 +250,12 @@ export function handlePlotProperties(lines: string[], defaultProperties: ChartCo
         
         if (key !== undefined && value !== undefined) { //Type Narrowing
             const last = key.split(".").pop() ?? ""
-            if (validPlotProperties.includes(last)) { // validPlotProperties doesnt include x or y or etc just title
+            if (validObjProperties.includes(last)) { // validPlotProperties doesnt include x or y or etc just title
                     helperPlotProperties(properties,key,value);
             }
             else {
                 // Evaluate using fuzzy matching later
-                findPossibleProperty(key,validPlotProperties,"PlotProperties",validRoots);
+                findPossibleProperty(key,validObjProperties,"PlotProperties",validRoots);
                 // Throw an error later
             }
         }     
@@ -674,7 +678,7 @@ export function findPossibleProperty(key: string, validProps: string[], flag: st
         case "LineProperty": {
                 let bestMatch = "";
                 let bestDist = Infinity;
-            for (let prop of validLineProperties) {
+            for (let prop of validProps) {
                 const dist = levD(key, prop);
                 if (dist < bestDist) {
                     bestDist = dist;
@@ -720,8 +724,8 @@ export function findPossibleProperty(key: string, validProps: string[], flag: st
                 const k = keyPath[p];
                 if (k === undefined) continue;
 
-                if (!validPlotProperties.includes(k)) {
-                    for (let prop of validPlotProperties) {
+                if (!validProps.includes(k)) {
+                    for (let prop of validProps) {
                         const dist = levD(k,prop);
                         if (dist < bestDist) {
                             bestDist = dist;

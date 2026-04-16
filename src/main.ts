@@ -8,9 +8,11 @@ import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
 import {  ChartOptions, ChartType, Ticks } from "chart.js/auto";
 import {autocompletion} from "@codemirror/autocomplete";
 
-import { linePlotCompletionSource } from "../helpers/plotProperties";
+import { PlotCompletionSource } from "../helpers/plotProperties";
 import { zoom } from "chartjs-plugin-zoom";
 import { divideScalarDependencies } from "mathjs";
+import { codePointSize } from "@codemirror/state";
+import { e } from "mathjs";
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
@@ -22,7 +24,7 @@ export default class PlotPlugin extends Plugin {
 
 		this.registerEditorExtension([
 			autocompletion({
-				override: [linePlotCompletionSource(this.settings,"line")],
+				override: [PlotCompletionSource(this.settings)],
 				activateOnTyping: true,
 			})]
 		)
@@ -60,6 +62,12 @@ export default class PlotPlugin extends Plugin {
 					case "bar":
 						chartInstance = await this.renderBar(cachedParsedText,chartInstance,el, chartType);
 						break;
+					case "pie":
+						case "doughnut":
+							case "polarArea":
+								case "radar":
+								chartInstance = await this.renderCircular(cachedParsedText, chartInstance, el, chartType);
+								break;
 
 				}
 			};
@@ -163,6 +171,17 @@ export default class PlotPlugin extends Plugin {
 				]
 				return await this.createChartInstane(chartInstance,el,globalProperties,data,parsedText, chartType);
 			};
+	async renderCircular(cachedParsedText: parsedText, chartInstance: any, el: HTMLElement, chartType: ChartType){
+		const parsedText = cachedParsedText;
+		const globalProperties = parsedText.globalProperties;
+		const data: PlotData[] = [
+			...parsedText.manualData,
+			...parsedText.tableData
+		]
+		console.log(data);
+		// Manage data to fit how pie and others accept it. 
+		return await this.createChartInstane(chartInstance, el, globalProperties, data, parsedText, chartType);
+	};
 
 
 		async createChartInstane (chartInstance: any, el: HTMLElement, globalProperties: GlobalProperties[], data: PlotData[], parsedText: parsedText, chartType: ChartType) {
@@ -486,6 +505,8 @@ export function getDefaultPlotProperties(settings: PlotPluginSettings, chartType
 	};
 }
 
+
+
 export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettings): ChartOptions<ChartType> {
 		const style = getComputedStyle(document.body);
 		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
@@ -531,13 +552,48 @@ export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettin
 		case "bar": 
 			return {
 				elements: {
-					bar: {borderWidth: settings.EborderWidth, borderRadius: 4}
+					bar: {borderWidth: settings.EborderWidth, borderRadius: 4, borderSkipped: false}
 				},
 				scales: {
-					x: {type: settings.xScalesType},
-					y: {type: settings.yScalesType}
-				}
+					x: {type: settings.xScalesType, offset: true, stacked: false, grid: {display:false}, ticks: {autoSkip:false}, 
+					title: {display: !settings.titleStatus, text: ""}},
+					y: {type: settings.yScalesType, stacked: false, grid: {display: true}, title: {display: !settings.titleStatus, text: ""}} 
+				},
+				indexAxis: "x"
 			};
+		case "pie":
+			return {
+				elements: {arc: {borderWidth: settings.EborderWidth}},
+				radius: "90%",
+				rotation: 0,
+				circumference: 360
+			} as any;
+		case "doughnut":
+			return {
+				elements: {arc: {borderWidth: settings.EborderWidth}},
+				radius: "90%",
+				cutout: "50%",
+				rotation: 0,
+				circumference: 360
+			} as any;
+		case "polarArea":
+			return {
+				elements: {arc: {borderWidth: settings.EborderWidth}},
+				scales: {r: {beginAtZero: true, ticks: {backdropColor: "transparent"}}}
+			} as any;
+		case "radar":
+	return {
+				elements: {line: {borderWidth: settings.EborderWidth,tension: 0.15,fill: true},
+				point: {radius: settings.pointRadius,hoverRadius: 4,hitRadius: 6,pointStyle: "circle"}},
+				scales: {r: {beginAtZero: true,
+					grid: {display: true},
+					angleLines: {display: true},
+					pointLabels: {display: true,font: {family: fontFamily,size: 11}},
+					ticks: {display: true,backdropColor: "transparent",font: {family: fontFamily,size: 10}
+				}
+			}
+		}
+	};
 
 		default:
 			return {};		
@@ -563,7 +619,7 @@ export function getBaseDefaults(settings: PlotPluginSettings): ChartOptions<Char
 				   zoom: {wheel: {enabled: settings.zoomStatus ? false : true}, 
 							pinch: {enabled: settings.zoomStatus ? false : true}, mode: "xy"}
 			},
-			title: {display: !settings.titleStatus, font: {family: fontFamily, size: 13, weight: 600}},
+			title: {display: !settings.titleStatus, text: "", font: {family: fontFamily, size: 13, weight: 600}},
 			tooltip: {enabled: true, padding: 10, cornerRadius: 8}
 		}
 	};
