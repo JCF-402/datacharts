@@ -371,7 +371,7 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                 compiledNested[obj.signature] = parsed // expr is an array
             } 
             else {
-                compiledNested[obj.signature] = math.compile(expr); // expr is supposed to be a valid equation. We compile it and the compiled object. 
+                compiledNested[obj.signature] = (expr); // expr is supposed to be a valid equation.
             }
         }
         
@@ -398,20 +398,20 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
             if (!isConstant) {
                 scope[variable] = val;
             }
-            for (let name in compiledNested) {
-                const v = compiledNested[name]; // grabs the expression with "name" signature
+            for (let signature in compiledNested) {
+                const nestedExpr = compiledNested[signature]; // grabs the expression with "name" signature
 
-                if (v === undefined) continue;
+                if (nestedExpr === undefined) continue;
 
-                if (typeof v === "number") {
-                    scope[name] = v; // if the expression is a scalar (constant). Simply assign it to the scope with the signature as its variable. 
+                if (typeof nestedExpr === "number") {
+                    scope[signature] = nestedExpr; // if the expression is a scalar (constant). Simply assign it to the scope with the signature as its variable. 
                 } 
-                else if (Array.isArray(v)) { // if the expression is a list of values the current equation needs to be evaluated with the current val
+                else if (Array.isArray(nestedExpr)) { // if the expression is a list of values the current equation needs to be evaluated with the current val
                     // at each value in the array. 
                     // So if f(x) = x^2 * D -> D: [0.3,0.4,0.5]. We get three plots, one for each D value. 
                     // ONLY the equation that contains the nested function needs to be plotted. Other functions work as normal.
 
-                    if (   vars.includes(name)     ) { // Checks if the signature that matches the list is a variable of the current equation.
+                    if (   vars.includes(signature)     ) { // Checks if the signature that matches the list is a variable of the current equation.
 
                         // Essentially evaluateExpressions needs to be called for each one. But evaluateExpressions has too much logic not need at this point.
                         // I also need to stop evaluating this equation entirely. 
@@ -419,12 +419,32 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                         // Then continue to the next equation
                         if (variable === undefined) continue equationLoop;
 
-                         results.push(...handleNestedArray(equation,variable,localRange,v,name));
+                         results.push(...handleNestedArray(equation.expr,variable,localRange,nestedExpr,signature,scope));
                          continue equationLoop;
                     } 
                 } 
                 else {
-                    scope[name] = v.evaluate(scope); // if the expression is neither a scalar nor an array then its an expression. evaluate it with normal the current val
+                    const xranges = parsedText.lineProperties.map(prop => `${prop.signature}.${prop.property}=${prop.value}`).filter(s => s.includes("xrange"));
+                    const indexRange = xranges.findIndex(s => s.startsWith(`${signature}.xrange=`));
+                    if (indexRange !== -1){
+                        // As of version 1.0.3 I want to support independant variables inside the nested equation. 
+                        // Re = DV/v
+                        // D: 0.3
+                        // v: 2T + 10
+                        // v.xrange = [100,300,50] Which creates a reynolds plot for each viscosity. Where Velocity is the main variable
+                        if (!xranges[indexRange]) continue equationLoop;
+                        const nestedLocalRangeString = xranges[indexRange].split("=")[1];
+                        if (!nestedLocalRangeString) continue equationLoop;
+                        let nestedLocalRange: [number,number,number] = JSON.parse(nestedLocalRangeString);
+                        if (variable === undefined) continue equationLoop;
+                        results.push(...handleNestedIndependant(equation,variable,localRange,nestedLocalRange,nestedExpr,signature, nestInfo,scope));
+                        continue equationLoop;
+
+
+                    } else {
+                    const compiledNestedExpr = math.compile(nestedExpr);
+                    scope[signature] = compiledNestedExpr.evaluate(scope); // if the expression is neither a scalar nor an array then its an expression. evaluate it with normal the current val
+                    }
                 }
             }
 
@@ -467,18 +487,20 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
 
 }
 
+
 function isNumberString(val: string): boolean {
   return val.trim() !== "" && !isNaN(Number(val));
 }
 
-function handleNestedArray(eq: Equation,variable: string, localRange: [number, number, number], v: number[], name: string) {
-    const expr = math.compile(eq.expr);
+function handleNestedArray(mainExpr: string ,variable: string, localRange: [number, number, number], v: number[], name: string, baseScope: Record<string, string | number>, legendName?: string): PlotData[] {
+    const expr = math.compile(mainExpr);
     const results: PlotData[] = [];
 
     for (let i of v) {
         const mDataPoints: Data[] = []
         for (let val = localRange[0]; val <= localRange[1]; val += localRange[2]) {
             const scope = {
+                ...baseScope,
                 [variable]: val,
                 [name]: i
             }
@@ -491,9 +513,44 @@ function handleNestedArray(eq: Equation,variable: string, localRange: [number, n
             }
             mDataPoints.push({x:val,y});
         }
-    results.push({signature: `${name}=${i}`, data: mDataPoints});
+    if (!legendName) results.push({signature: `${name}=${i}`, data: mDataPoints});
+    else results.push({signature: `${legendName}=${i}`, data: mDataPoints});
+    
     }
     return results;
+}
+
+function handleNestedIndependant(eq: Equation, variable: string, localRange: [number,number,number], 
+    nestedLocalRange: [number,number,number], nestedExpr: any, signature: string, nestInfo: string[][], baseScope: Record<string, string | number>): PlotData[]{
+    
+    const nestedResults: number[] = [];
+    // Get Main Equation Variable --------------------------------------
+    const nestedEquationObject: Equation = {
+        expr: nestedExpr,
+        signature:signature
+    };
+    const vars = getVariable(nestedEquationObject).filter((v) => !builtInConstants.includes(v)); 
+    // vars can include builtInConstants that need to be filtered out so they arent recognized as the variable.
+    const newVars = vars.flatMap(v => {
+        if (nestInfo[1]?.includes(v)) {
+            return [];
+        }
+        return [v];
+        })
+        // vars also filters out any variabales that are actually nested function signatures. Think if f(x) = G + x -> filters out G as long as G is declared as G: val
+        const nestedVariable =  newVars[0];
+        if (!nestedVariable) return [];
+    const nestedEquation = math.compile(nestedExpr);
+    for (let i = nestedLocalRange[0]; i <= nestedLocalRange[1]; i += nestedLocalRange[2]){
+        const nestedScope: Record<string, number | string> = {
+            ...baseScope,
+        };
+        nestedScope[nestedVariable] = i;
+        let nestedY = nestedEquation.evaluate(nestedScope);
+        nestedResults.push(nestedY);
+    };
+    return handleNestedArray(eq.expr, variable, localRange, nestedResults, signature, baseScope, nestedVariable);
+
 }
 
 function handleDiscontinuities(mDataPoints: Data[], localRange: [number, number, number], y: number) {
