@@ -326,7 +326,7 @@ export function getEquations(exprs: RawExpr[]) {
     // Returns array containing all equation objects for the codeblock
 }
 
-export function evaluateExpressions(parsedText: parsedText, xRange: [number,number,number]) {
+export function evaluateExpressions(parsedText: parsedText, range: [number,number,number]) {
     const results = [];
     const nestInfo = [ // [[expresions],[signatures]]
         parsedText.nestedEquations.map(n => n.expr),
@@ -378,8 +378,8 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
         //--------------------------------------------------------
 
         // -------------- This block sets local range ----------------------------------
-        const limits = parsedText.lineProperties.filter(l => l.signature === equation.signature && l.property === "xrange");
-        let localRange: [number, number, number] = xRange;
+        const limits = parsedText.lineProperties.filter(l => l.signature === equation.signature && l.property === "range");
+        let localRange: [number, number, number] = range;
         if (limits.length && limits[0]?.value){
             const parsed = limits[0].value.replace("[","").replace("]","").split(",").map(s => Number(s));
             //localRange = JSON.parse(limits[0].value) // limits[0] is looking something like "[-10,10,0.1]"
@@ -424,16 +424,16 @@ export function evaluateExpressions(parsedText: parsedText, xRange: [number,numb
                     } 
                 } 
                 else {
-                    const xranges = parsedText.lineProperties.map(prop => `${prop.signature}.${prop.property}=${prop.value}`).filter(s => s.includes("xrange"));
-                    const indexRange = xranges.findIndex(s => s.startsWith(`${signature}.xrange=`));
-                    if (indexRange !== -1){
+                    const ranges = parsedText.lineProperties.map(prop => `${prop.signature}.${prop.property}=${prop.value}`).filter(s => s.includes("range"));
+                    const inderange = ranges.findIndex(s => s.startsWith(`${signature}.range=`));
+                    if (inderange !== -1){
                         // As of version 1.0.3 I want to support independant variables inside the nested equation. 
                         // Re = DV/v
                         // D: 0.3
                         // v: 2T + 10
-                        // v.xrange = [100,300,50] Which creates a reynolds plot for each viscosity. Where Velocity is the main variable
-                        if (!xranges[indexRange]) continue equationLoop;
-                        const nestedLocalRangeString = xranges[indexRange].split("=")[1];
+                        // v.range = [100,300,50] Which creates a reynolds plot for each viscosity. Where Velocity is the main variable
+                        if (!ranges[inderange]) continue equationLoop;
+                        const nestedLocalRangeString = ranges[inderange].split("=")[1];
                         if (!nestedLocalRangeString) continue equationLoop;
                         let nestedLocalRange: [number,number,number] = JSON.parse(nestedLocalRangeString);
                         if (variable === undefined) continue equationLoop;

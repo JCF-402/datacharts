@@ -1,5 +1,5 @@
 
-import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleTableData, Equation, GlobalProperties,Data} from "../helpers/parser"
+import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleTableData, GlobalProperties, handleGlobalOptions} from "../helpers/parser"
 import { createPlot, buildDatasets} from "../helpers/graphs";
 import {Menu, Notice, Plugin, MarkdownView} from "obsidian";
 import { apply } from "mathjs";
@@ -47,8 +47,9 @@ export default class PlotPlugin extends Plugin {
 
 			
 
-			let globalXRange = checkGlobalRange(cachedParsedText) // Gets the global range for the current codeblock. This is because the plot might have a global definition of the xrange.
-			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalXRange) ? globalXRange : [-10,10,0.1]); //Evaluates all expressions, if any, inside the codeblock.
+			let globalrange = checkGlobalRange(cachedParsedText) // Gets the global range for the current codeblock. This is because the plot might have a global definition of the range.
+
+			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalrange) ? globalrange : [-10,10,0.1]); //Evaluates all expressions, if any, inside the codeblock.
 			
 			const refreshTableData = async () => {
 				const sourceLines = newMarkdown.filter(s => s.includes("source(") && s.includes("::"));
@@ -287,18 +288,15 @@ function getSourcePaths(src: string[]) {
 };
 
 function checkGlobalRange(parsedText: parsedText) {
-	let globalXRange: [number, number, number] = [-10,10,0.1];
-				const line = (parsedText.globalProperties).find(s => s.expr.includes("xrange"));
+	let globalrange: [number, number, number] = [-10,10,0.1];
+				const line = (parsedText.globalProperties).find(s => s.signature.includes("range"));
 				if (line == undefined) return [-10,10,0.1];
-		
-					const rhs = line.expr.split("=")[1]; 
-					if (rhs === undefined) return [-10,10,0.1];
 					try {
-						const parsed = rhs.replace("[","").replace("]","").split(",").map(s => Number(s));
+						const parsed = line.expr.replace("[","").replace("]","").split(",").map(s => Number(s));
 						//const parsed = JSON.parse(rhs.trim());
 						if (Array.isArray(parsed) && isTuple(parsed)) {
-							globalXRange = parsed;
-							return globalXRange;
+							globalrange = parsed;
+							return globalrange;
 						}
 						return [-10,10,0.1];
 					} catch {

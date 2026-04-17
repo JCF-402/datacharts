@@ -76,14 +76,14 @@ export const validLineDatasetProperties = [
 	"tension",
 	"showLine",
 	"spanGaps",
-	"xrange",
+	"range",
 	"pointStyle",
 	"pointRadius",
 	"hidden"
 ]
 
 export const globalOptions = [
-    "xrange",
+    "range",
     "canvasWidth",
     "canvasHeight",
     "canvasRadius",
@@ -129,7 +129,7 @@ const propertyDescriptions: Record<string,string> = {
     interactions: "Controls options for mouse interactions with chart.",
     layout: "Controls the chart layout options.",
     // global
-    xrange: "Controls the range for evaluating a main equation.",
+    range: "Controls the range for evaluating a main equation.",
     canvasWidth: "Controls the chart width in pixels.",
     canvasHeight: "Controls the chart height in pixels.",
     canvasRadius: "Controls chart corner radius.",
