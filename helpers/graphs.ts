@@ -73,7 +73,7 @@ export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
 	});
 }
 
-
+// Transform data is meant for non-scatter/line charts. I.e. pie, radar, etc
 function transformData(data: PlotData[], chartType: ChartType){
     switch(chartType){
         case "pie":
@@ -109,11 +109,4 @@ function transformData(data: PlotData[], chartType: ChartType){
             return undefined;
     }	
 }
-
-const getRandomRGB = (): string => {
-  const r = Math.floor(Math.random() * 256);
-  const g = Math.floor(Math.random() * 256);
-  const b = Math.floor(Math.random() * 256);
-  return `rgb(${r}, ${g}, ${b})`;
-};
 

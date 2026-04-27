@@ -1,5 +1,5 @@
 
-import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleTableData, GlobalProperties, handleGlobalOptions} from "../helpers/parser"
+import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleSourceData, GlobalProperties, handleGlobalOptions} from "../helpers/parser"
 import { createPlot, buildDatasets} from "../helpers/graphs";
 import {Menu, Notice, Plugin, MarkdownView} from "obsidian";
 import { apply } from "mathjs";
@@ -53,7 +53,7 @@ export default class PlotPlugin extends Plugin {
 			
 			const refreshTableData = async () => {
 				const sourceLines = newMarkdown.filter(s => s.includes("source(") && s.includes("::"));
-				cachedParsedText.tableData = await handleTableData(sourceLines);
+				cachedParsedText.tableData = await handleSourceData(sourceLines);
 			};
 
 			const renderCurrentChart = async () => {
@@ -112,16 +112,16 @@ export default class PlotPlugin extends Plugin {
 	}
 
 	async refreshOpenCharts() {
-  	this.app.workspace.getLeavesOfType("markdown").forEach(async (leaf) => {
-    const view = leaf.view as MarkdownView;
-    view.previewMode?.rerender(true);
-  });
-}
+		this.app.workspace.getLeavesOfType("markdown").forEach(async (leaf) => {
+		const view = leaf.view as MarkdownView;
+		view.previewMode?.rerender(true);
+	});
+	}
 
 	getChartTypes(markdown: string[]): ChartType {
 		const lines = markdown;
 		for (const line of lines) {
-			if (line.startsWith("type::")) {
+			if (line.startsWith("type::") || line.startsWith("Type::")) {
 				const path = line.split("::");
 				if ( path[1] === undefined) continue;
 				const type = path[1].trim() as ChartType
@@ -215,7 +215,8 @@ export default class PlotPlugin extends Plugin {
 					})
 
 					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions, chartType); // Chart is created. 
-					this.charts.add(chartInstance);
+					this.charts.add(chartInstance); // Adds chart to list of charts
+					// Right-Click menu for chart options
 					canvas.addEventListener("contextmenu", async (e) => {
 						e.preventDefault();
 
@@ -243,7 +244,7 @@ export default class PlotPlugin extends Plugin {
 				}
 			return chartInstance;
 		};
-
+		// Export functions
 		async exportChartPNG(chartInstance: any, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.png`){
 			const base64 = chartInstance.toBase64Image("image/png",1);
 			const base64Data = base64.replace(/^data:image\/png;base64,/,"");

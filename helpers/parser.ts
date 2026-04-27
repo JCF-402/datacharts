@@ -13,6 +13,7 @@ import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
 import {validObjProperties,validRoots} from "./plotProperties"
 import { sign } from "mathjs";
+import { column } from "mathjs";
 
 const math = create(all);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
@@ -66,7 +67,7 @@ export type parsedText = {
     equations: Equation[],
     nestedEquations: NestedEquations[],
     manualData: PlotData[]
-    tableData: PlotData[]
+    tableData: PlotData[] | any
 
 }
 
@@ -92,7 +93,7 @@ export async function handleMarkdown(markdown: string[], defaultProperties: Char
             const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
             const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
             const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
-            const tableData = await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::")));
+            const tableData = await handleSourceData(lines.filter(s => s.includes("source(") && s.includes("::")));
             const parsedText: parsedText = {
                 lineProperties: lineProperties,
                 chartOptions: chartOptions,
@@ -116,7 +117,7 @@ export async function handleMarkdown(markdown: string[], defaultProperties: Char
              equations: [],
              nestedEquations: [],
              manualData: getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s))))),
-             tableData: await handleTableData(lines.filter(s => s.includes("source(") && s.includes("::"))),
+             tableData: await handleSourceData(lines.filter(s => s.includes("source(") && s.includes("::"))),
            }
 
         }
@@ -133,7 +134,7 @@ export async function handleMarkdown(markdown: string[], defaultProperties: Char
     }
 }
 
-
+// For data entries in the form of data(name) :: [x,y]
 function handleManualData(lines: string[]) {
     const datasets: RawExpr[] = [];
     let current: RawExpr | undefined = undefined;
@@ -492,6 +493,7 @@ function isNumberString(val: string): boolean {
   return val.trim() !== "" && !isNaN(Number(val));
 }
 
+// For when the nested equation is of the form D : [start, end , step]. We make a plot for each step
 function handleNestedArray(mainExpr: string ,variable: string, localRange: [number, number, number], v: number[], name: string, baseScope: Record<string, string | number>, legendName?: string): PlotData[] {
     const expr = math.compile(mainExpr);
     const results: PlotData[] = [];
@@ -578,14 +580,20 @@ function handleDiscontinuities(mDataPoints: Data[], localRange: [number, number,
             return isDiscontinuity;
 }
 
-export async function handleTableData(lines: string[]) {
+// Handles source :: types
+export async function handleSourceData(lines: string[]) {
     const app = getApp();
     const results = [];
+    
 	for (let line of lines) {
         // Syntax is source(dataLabel) :: tableSelector[col1,col2] is table from path
+        // For cases where the source is a spreadsheet in the vault. The syntax is
+        // source(name) :: [col1, col2] is sheet from path
+
 		let [signature, expr] = line.split("::"); // [source(name), tableSelector[] is table from "path"]
 
 		if (!signature || !expr) continue;
+
         if (!line.includes("is")) {
             customNotice(`Missing syntax key: is on source`,"notice-error",5000);
             continue;
@@ -595,13 +603,17 @@ export async function handleTableData(lines: string[]) {
         }
 
         const info = expr.split(/ is | from /); // [tableSelector, table, path]
-		const name =  signature.replace("source","").replace("(","").replace(")","").trim();
+        // Internally I used the signature as the name for every dataset. So here I grab the name within parentheses
+		const name =  signature.replace("source","").replace("(","").replace(")","").trim(); 
     	signature = name;
+
         if (!info[0]) {
             customNotice(`Cannot find TableName for ${signature}`,'notice-error',5000);
             continue;
         }
+
         const sourceInfo = info[0];
+        // Here we check what type of source it is. table, sheet, csv, query, etc
 		if (info[1] === "table") {
 
 			const path = info[2]?.trim() + ".md";
@@ -613,13 +625,34 @@ export async function handleTableData(lines: string[]) {
             }
 
 
-        }	
+        }
+        else if (info[1] === "sheet") {
+            if (!info[2]?.endsWith(".sheets")) {
+                const path = info[2]?.trim() + ".sheets";
+                const file = app.vault.getAbstractFileByPath(path);
+                if (file instanceof TFile) {
+                    const text = await app.vault.read(file);
+                    try {
+                        
+                        const data = JSON.parse(text);
+                        
+                        results.push(extractSheet(data, signature, sourceInfo));
+                    } catch {
+                        customNotice("Could not find source data. Check sheet.", "notice-warning");
+                    }
+
+                    
+                }
+            }
+        }
+            
 
 	}
+    
     return results;
 }
 
-
+// This function parses the Markdown table data when the table type is used with source :: 
 function extractTable(markdown: string, signature: string, sourceInfo: string) {
     const lines = markdown.split("\n");
     const data: Data[] = [];
@@ -725,10 +758,98 @@ function extractTable(markdown: string, signature: string, sourceInfo: string) {
 
 
     }}
-
+    
     return { signature: signature, data: data };
 }
 
+function extractSheet(sheetData: any, signature: string, sourceInfo: string) {
+    // SourceInfo can be three things
+    // 1. [col1 , col2] where each col is a letter A,B, etc or a custom Name. In this case we search the whole column until no more blanks
+    // 2. [col1(row1) , col2(row1)] starting row. Same as above but start at a custom row
+    // 3. [col1(row1:row2), col2(row1:row2)] start and end specified
+
+    const data: Data[] = []
+    if (!sourceInfo.trim().startsWith("[") || !sourceInfo.trim().endsWith("]")) {
+        customNotice("Missing bracket for sheet source info.","notice-error")
+        return;
+    }
+    // Split the info so that its an array with [col1, col2]
+    const info = sourceInfo.replace("[","").replace("]","").split(",") ;
+
+    const col1Info = info[0]?.trim() ?? "A"; // Defaults to A 
+    const col2Info = info[1]?.trim() ?? "B"; // Defaults to B
+    let col1:  string = "0"; 
+    let col2:  string = "1";
+    let col1WRows: string | string[];
+    let col2WRows: string | string[];
+    let sFlag = 0;
+
+    if (!col1Info?.includes("(")) {
+        // Scenario 1
+        col1 = col1Info // col1 identifier becomes whatever was written
+       if (/^[A-Za-z]$/.test(col1)) {
+            const num = col1.toUpperCase().charCodeAt(0) - 65; // Take the column name A-Z and make it a number 
+            col1 = String(num);
+        } else {
+            // col1 is a custom name (hopefully). So I need to get the column number associated with that name
+            const num = Number(Object.keys(sheetData.columns).find(k => sheetData.columns[k] === col1));
+            col1 = String(num);
+        }
+        sFlag = 1;
+    } else if (col1Info.includes("(") && col1Info.includes(")")){
+        // Scenarios 2 and 3
+        // Here the key needs to be row1:col1 -> row2:col1
+        col1WRows = col1Info.replace(")","").split("(") // Becomes [col1 , row1:]
+
+
+    }
+
+    if (!col2Info?.includes("(")) {
+        // Scenario 1
+        col2 = col2Info // col2 identifier becomes whatever was written
+       if (/^[A-Za-z]$/.test(col2)) {
+            const num = col2.toUpperCase().charCodeAt(0) - 65; // Take the column name A-Z and make it a number 
+            col2 = String(num);
+        } else {
+            // col2 is a custom name (hopefully). So I need to get the column number associated with that name
+            const num = Number(Object.keys(sheetData.columns).find(k => sheetData.columns[k] === col2));
+            col2 = String(num);
+        }
+    } else if (col2Info.includes("(") && col2Info.includes(")")){
+        // Scenarios 2 and 3
+        // Here the key needs to be row1:col1 -> row2:col1
+        col2WRows = col2Info.replace(")","").split("(") // Becomes [col1 , row1:]
+    }
+
+    switch (sFlag) {
+        case 1: {
+            // Scenario 1 get data where col is just a column name not rows specified
+            for (let key in sheetData.values) {
+                const [row, col] = key.split(":");
+                if (col === col1) {
+                    const yKey = `${row}:${col2}`;
+                    const xV = sheetData.values[key];
+                    const yV = sheetData.values[yKey];
+
+                    if (yV !== undefined) {
+                        data.push({x: isNaN(Number(xV)) ? xV : Number(xV), y: isNaN(Number(yV)) ? yV : Number(yV)});
+                    }
+                }
+            }
+            return {signature: signature, data: data};
+        }
+        default:
+            return {signature: signature, data: data}; // data will be empty here
+    }
+
+
+    
+
+
+}
+
+
+// This was an attempt to autosuggest possible properties before I added the autocomplete feature. It is still useful but less so.
 export function findPossibleProperty(key: string, validProps: string[], flag: string, validRoots?: string[], ) {
 
     switch (flag) {
