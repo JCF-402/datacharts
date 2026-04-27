@@ -2,7 +2,7 @@
 
 DataCharts is an Obsidian plugin for creating charts, plotting functions, and visualizing note data directly in markdown. Further documentation can be found at https://datacharts-docs.vercel.app/. 
 
-![Line Plot Demo](assets/linePlotGIF.gif)
+![Line Plot Demo](assets/introGIF.gif)
 
 ## Features
 
@@ -42,6 +42,12 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 
 ## Changelog
+
+### 1.0.3
+- Added support for Nested Independent Equations. For details look at docs.
+- Changed xrange to range
+- Fixed bug with global range
+- Added preliminary support for spreadsheet plugin support. More to come.
 
 ### 1.0.2
 
