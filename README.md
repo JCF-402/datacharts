@@ -42,6 +42,13 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 
 ## Changelog
+
+### 1.0.6
+- Stopped using Regex to parse equations (in some places).
+Instead using mathjs own node system to parse
+equations. This fixes things like
+y1 = x or φ1 = x not working.
+
 ### 1.0.5
 - Fixed ESLint errors in settings.ts and main.ts
 
