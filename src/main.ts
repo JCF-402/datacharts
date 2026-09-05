@@ -308,7 +308,7 @@ function checkGlobalRange(parsedText: parsedText) {
 export function customNotice(msg: string, cls = "", timeout = 4000) {
     const notice = new Notice(msg, timeout);
 
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
         const el = notice.containerEl;
         if (el && cls) el.classList.add(cls);
     });

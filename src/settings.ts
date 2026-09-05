@@ -146,8 +146,7 @@ export class PlotSettingTab extends PluginSettingTab {
 			new Setting(appearance)
 			.setName("Canvas background")
 			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-					.setPlaceholder("var(--background-secondary)")
+			
 					.setValue(this.plugin.settings.backgroundColor)
 					.onChange(async (value) => {
 						this.plugin.settings.backgroundColor = value;
@@ -206,8 +205,8 @@ export class PlotSettingTab extends PluginSettingTab {
 			)
 			new Setting(images)
 			.setName("Save image path")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Default path for saving charts as PNG or SVG, defaults to Attachments/Charts/")
+			
+			.setDesc("Default path for saving charts as PNG or SVG.")
 			.addText(text => text
 				.setPlaceholder(this.plugin.settings.saveImagesPath)
 				.setValue(this.plugin.settings.saveImagesPath)
