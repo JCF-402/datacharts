@@ -1,6 +1,6 @@
 
 import {create , all, isFunctionNode, isSymbolNode} from "mathjs";
-import type { EvalFunction} from "mathjs";
+import type { AssignmentNode, EvalFunction, FunctionAssignmentNode} from "mathjs";
 
 
 import type {ChartConfiguration, ChartType} from "chart.js/auto";
@@ -8,7 +8,7 @@ import { TFile} from "obsidian";
 
 import { getApp } from "./appContext";
 
-import { customNotice,isTuple } from "main";
+import {  customNotice,isTuple } from "main";
 
 import {validObjProperties,validRoots} from "./plotProperties"
 
@@ -81,14 +81,13 @@ type DynamicObject = Record<string, unknown>;
 const builtInConstants = ["e","E","pi","PI"];
 
 export const propertyPattern = /^\s*(.+?)\.([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/; // Every property definition follows 
-const equationRegex = /^\s*(?:[a-zA-Z]+\s*\(\s*[a-zA-Z]+\s*\)|[a-zA-Z]+)\s*=\s*.+$/;
 const nestedRegex = /^\s*([a-zA-Z]\w*)\s*:\s*(.+?)\s*(?:#.*)?$/;
 
 
 
 
 export async function handleMarkdown(markdown: string[], defaultProperties: ChartConfiguration["options"], chartType: ChartType): Promise<parsedText> {
-    const lines = markdown.filter(s => s !== "");
+    const lines = markdown.filter(s => s !== ""); // Filter out empty lines
 
     switch (chartType) {
         case "line":
@@ -96,7 +95,7 @@ export async function handleMarkdown(markdown: string[], defaultProperties: Char
             const lineProperties = handleLineProperties(lines.filter(s => (!s.includes("obj.") || !s.includes("global.")) && propertyPattern.test(s)),propertyPattern);
             const chartOptions = handlePlotProperties(lines.filter(s => s.startsWith("obj.")), defaultProperties); // Plot properties are "obj.property = value"
             const globalOptions = handleGlobalOptions(lines.filter(s => s.startsWith("global."))); // Global properties are global.
-            const equations = getEquations(handleEquations(lines.filter(s => equationRegex.test(s))));
+            const equations = getEquations(handleEquations(lines.filter(s => s.includes("=") && !propertyPattern.test(s))));
             const nestedEquations = getEquations(handleNestedEquations(lines.filter(s => nestedRegex.test(s))));
             const manualData = getData(handleManualData(lines.filter(s => s.includes("::") || (!s.includes("=") && !propertyPattern.test(s)))));
             const tableData = await handleSourceData(lines.filter(s => s.includes("source(") && s.includes("::")));
@@ -234,7 +233,10 @@ export function handleNestedEquations(lines: string[]) {
 }
 
 export function handleLineProperties(lines: string[], pattern: RegExp): LineProperties[] { 
-
+    // This function takes an array of strings and a regular expression pattern as input. 
+    // It uses the pattern to extract line properties from each string in the array. 
+    // The extracted properties are returned as an array of LineProperties objects, each containing a signature, property, and value. 
+    // If a line does not match the pattern or is missing any of the required components, it is ignored.
     const lineProperties = lines.flatMap(s => {
  
         const match = s.match(pattern);
@@ -320,9 +322,32 @@ export function handleGlobalOptions(lines: string[]): GlobalProperties[] {
 }
 
 export function handleEquations(lines: string[]) { // getEquations is in charge of moving through the array of lines and finding each equation.
-    const exprs = []
-    for (let line of lines) {
+    // This function takes an array of strings as input, where each string represents a line of text. 
+    // It searches for lines that contain an equation in the form of "signature = expression". 
+    // When it finds such a line, it splits the line into the signature and expression parts, trims any whitespace, and creates a RawExpr object with these values. 
+    // The RawExpr objects are collected into an array, which is returned at the end of the function.
+    const exprs: RawExpr[] = []
 
+
+    for (const line of lines) {
+        try {
+            const node = math.parse(line);
+
+            if (node.type === "FunctionAssignmentNode") {
+                const fnNode = node as FunctionAssignmentNode;
+                const signature = `${fnNode.name}(${fnNode.params.join(",")})`;
+                const expr = fnNode.expr.toString();
+                exprs.push({signature, expr});
+            }
+            else if (node.type === "AssignmentNode") {
+                const aNode = node as AssignmentNode;
+
+                exprs.push({signature: aNode.object.toString(), expr: aNode.value.toString()});
+        }
+        } catch  {
+            customNotice(`Invalid equation: ${line}`);
+        }
+        /*
         if (line.includes("=")) {
             // Equation found. Add it to array
             const expr = line.split("=");
@@ -330,6 +355,7 @@ export function handleEquations(lines: string[]) { // getEquations is in charge 
                 exprs.push({signature: expr[0].trim(), expr:expr[1].trim()}); // Need to handle undefined later
             }
         }
+            */
     }
     return exprs; //Array of RawExpr objects
 }
