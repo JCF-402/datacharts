@@ -146,6 +146,7 @@ export class PlotSettingTab extends PluginSettingTab {
 			new Setting(appearance)
 			.setName("Canvas background")
 			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.setPlaceholder("var(--background-secondary)")
 					.setValue(this.plugin.settings.backgroundColor)
 					.onChange(async (value) => {
@@ -205,6 +206,7 @@ export class PlotSettingTab extends PluginSettingTab {
 			)
 			new Setting(images)
 			.setName("Save image path")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setDesc("Default path for saving charts as PNG or SVG, defaults to Attachments/Charts/")
 			.addText(text => text
 				.setPlaceholder(this.plugin.settings.saveImagesPath)
@@ -268,9 +270,9 @@ export class PlotSettingTab extends PluginSettingTab {
 
 		case "dropdown":
 			setting.addDropdown(drop => {
-				Object.entries(item.options).forEach(([value, label]) =>
+				Object.entries(item.options).forEach(([value, label]) => {
 					drop.addOption(value, label)
-				);
+				});
 
 				drop
 					.setValue(this.plugin.settings[item.key])
@@ -288,7 +290,7 @@ export class PlotSettingTab extends PluginSettingTab {
 		btn
 			.setIcon("reset")
 			.setTooltip("Reset")
-			.onClick(async () => {
+			.onClick(() => {
 				switch (item.type) {
 					case "number":
 						this.plugin.settings[item.key] =
@@ -306,8 +308,10 @@ export class PlotSettingTab extends PluginSettingTab {
 						break;
 				}
 
-				await this.plugin.saveSettings();
-				this.display();
+				void (async () => {
+					await this.plugin.saveSettings();
+					this.display();
+				})();
 			})
 	);
 }
