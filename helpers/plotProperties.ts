@@ -1,11 +1,8 @@
 
-import { Completion, CompletionContext } from "@codemirror/autocomplete";
+import {  CompletionContext } from "@codemirror/autocomplete";
 import { PlotPluginSettings } from "settings";
 import { getDefaultPlotProperties } from "main";
-import LinearScaleBase from "chart.js/dist/scales/scale.linearbase";
-import { index } from "mathjs";
-import { format } from "mathjs";
-import { filter } from "mathjs";
+
 import { ChartType } from "chart.js";
 
 
@@ -241,14 +238,14 @@ export function PlotCompletionSource(settings: PlotPluginSettings) {
 
             const partial = parts.pop() ?? ""; // Removes what is being typed
 
-            let node: any = chartTree; // Traversal starts at root
+            let node: TreeNode = chartTree; // Traversal starts at root
 
             for (const part of parts) { // Walk through path
                 if (!part) continue; 
+                const next = node[part]; // Get the next node in the path
+                if (!next) return null; // If the path is invalid, return null
 
-                if (!(part in node)) return null; // If part not a valid jey in nodes (chartTree) stop suggesting
-
-                node = node[part]; // the node becomes the next object inside part so node was scales.x is now x. -> options for x
+                node = next; // Move to the next node. 
             }
             return {
                 from: context.pos - partial.length, // we only replace the property being written not the whole obj. -> path
@@ -327,18 +324,19 @@ function inLineplotBlock(context: CompletionContext): boolean {
 
 
 
-export function objectToTree(obj: any): TreeNode {
+export function objectToTree(obj: unknown): TreeNode {
   const tree: TreeNode = {};
 
-  for (const key in obj) { 
-    const value = obj[key];
-
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      tree[key] = objectToTree(value);
-    } else {
-      tree[key] = {};
+    if (typeof obj !== "object" ||obj === null ||Array.isArray(obj)) {
+        return tree;
     }
-  }
+    for (const [key, value] of Object.entries(obj)) {
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            tree[key] = objectToTree(value);
+        } else {
+            tree[key] = {};
+        }
+    }
 
   return tree;
 }

@@ -1,19 +1,23 @@
 import { ChartType} from "chart.js/auto";
-import {Data} from "./parser";
+import {DataChartsChart} from "./graphs";
 
-export function generateSVG(chartInstance: any, chartType: ChartType) {
+export function generateSVG(chartInstance: DataChartsChart, chartType: ChartType) {
     const width = chartInstance.width;
 	const height = chartInstance.height;
 
 	//const backgroundColor = this.settings.backgroundColor;
 	const xScale = chartInstance.scales.x;
 	const yScale = chartInstance.scales.y;
+	if (!xScale || !yScale) {
+    throw new Error("Scales not found in chart instance. Unable to generate SVG.");
+	}
 	const area = chartInstance.chartArea;
 	const style = getComputedStyle(document.body);
 	const bg = style.getPropertyValue("--background-secondary").trim() || "#ffffff";
 	const text = style.getPropertyValue("--text-normal").trim() || "#000000";
 	const muted = style.getPropertyValue("--text-muted").trim() || "#666666";
 	const border = style.getPropertyValue("--background-modifier-border").trim() || "#d0d0d0";
+	
     let svg = "";
     switch(chartType) {
         case "line": {
@@ -37,7 +41,9 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 				stroke-width="1"
 			/>
 			 `;
-			 const title = chartInstance.options?.plugins?.title;
+			 let title = chartInstance.options?.plugins?.title;
+			 if (!title) title = { display: false, text: "" };
+			 const titleText = svgText(title.text);
 
 				if (title?.display && title.text) {
 					svg += `
@@ -47,10 +53,10 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 						font-size="16"
 						font-weight="bold"
 						text-anchor="middle"
-						fill="${text}">${title.text}</text>
+						fill="${text}">${titleText}</text>
 					`;
 				}
-			xScale.ticks.forEach((tick: any, i: number) => {
+			xScale.ticks.forEach((tick, i: number) => {
 			const x = xScale.getPixelForTick(i);
 
 			    svg += `
@@ -79,14 +85,14 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 				text-anchor="middle"
 				dominant-baseline="middle"
 				fill="${text}">
-				${tick.label}
+				${svgText(tick.label)}
     			</text>
 			`;
 
 
 				});
 
-			yScale.ticks.forEach((tick: any, i: number) => {
+			yScale.ticks.forEach((tick, i: number) => {
 				const y = yScale.getPixelForTick(i);
 				svg += `
 				<line
@@ -114,18 +120,25 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 					font-size="12"
 					text-anchor="end"
 					dominant-baseline="middle"
-					fill="${text}">${tick.label}</text>
+					fill="${text}">${svgText(tick.label)}</text>
 				`;
 			});
 			let lx = width - 74;
 			let ly = 25;
 
-			 chartInstance.data.datasets.forEach((dataset: any, i: number) => {
+			 chartInstance.data.datasets.forEach((dataset, i: number) => {
 				const y = ly + i*20;
 				const meta = chartInstance.getDatasetMeta(i);
-				const points = meta.data.map((pt: Data) => `${pt.x},${pt.y}`).join(" ");
-				const color = dataset.borderColor || "black";
-				const radius = (dataset.pointRadius && dataset.pointRadius === 0) ? 0 : dataset.pointRadius;
+				const points = meta.data.map((pt) => `${pt.x},${pt.y}`).join(" ");
+				const color = svgColor(dataset.borderColor);
+				const borderWidth = svgNumber(dataset.borderWidth, 2);
+
+				let radius = 1; // Default radius
+				if ("pointRadius" in dataset && typeof dataset.pointRadius === "number") { 
+					radius = dataset.pointRadius; // Use dataset's pointRadius if available
+				}
+
+				//const radius = (dataset.pointRadius && dataset.pointRadius === 0) ? 0 : dataset.pointRadius;
 				//const radius = dataset.pointRadius && dataset.pointRadius > 0 ? dataset.pointRadius : 3;
 				svg += `
 				<rect x="${lx}" y="${y-10}" width="12" height="12" fill="${color}" />
@@ -139,11 +152,11 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 				<polyline
 					fill="none"
 					stroke="${color}"
-					stroke-width="${dataset.borderWidth || 2}"
+					stroke-width="${borderWidth}"
 					points="${points}"
 					
 				/>`;
-				meta.data.forEach((pt: Data) => {
+				meta.data.forEach((pt) => {
 					svg += `
 					<circle
 						cx="${pt.x}"
@@ -156,8 +169,10 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 
 			
 		});
-		const xTitle = chartInstance.options?.scales?.x?.title;
-
+		
+		let xTitle = "title" in xScale.options && isScaleTitle(xScale.options.title) ? xScale.options.title : undefined; // xTitle is not present in some chart types, so we need to check if it exists and is of the correct type
+		if (!xTitle) xTitle = { display: false, text: "" };
+		const xtitleText = svgText(xTitle.text);
 		if (xTitle?.display && xTitle.text) {
 			svg += `
 			<text
@@ -166,12 +181,13 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 				font-size="13"
 				font-weight="bold"
 				text-anchor="middle"
-				fill="${text}">${xTitle.text}</text>
+				fill="${text}">${xtitleText}</text>
 			`;
 		}
 
-		const yTitle = chartInstance.options?.scales?.y?.title;
-
+		let yTitle = "title" in yScale.options && isScaleTitle(yScale.options.title) ? yScale.options.title : undefined;
+		if (!yTitle) yTitle = { display: false, text: "" };
+		const ytitleText = svgText(yTitle.text);
 		if (yTitle?.display && yTitle.text) {
 			svg += `
 			<text
@@ -182,7 +198,7 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
 				text-anchor="middle"
 				fill="${text}"
 				transform="rotate(-90 16 ${(area.top + area.bottom) / 2})">
-				${yTitle.text}
+				${ytitleText}
 			</text>
 			`;
 		}
@@ -191,4 +207,54 @@ export function generateSVG(chartInstance: any, chartType: ChartType) {
     }
     }
     return svg
+}
+// Type definition for scale titles. Because when trying to access the title property of a scale, it can be undefined or not have the expected structure. This type helps ensure that we only try to access properties that exist and are of the correct type.
+// Specifically for making xTitle and yTitle work
+type ScaleTitle = {
+    display?: boolean;
+    text?: string | string[];
+};
+
+function isScaleTitle(value: unknown): value is ScaleTitle {
+    if (typeof value !== "object" || value === null) {
+        return false;
+    }
+
+    const title = value as Record<string, unknown>;
+
+    return (
+        (title.display === undefined ||
+            typeof title.display === "boolean") &&
+        (title.text === undefined ||
+            typeof title.text === "string" ||
+            (Array.isArray(title.text) &&
+                title.text.every(v => typeof v === "string")))
+    );
+}
+
+function svgText(value: unknown): string {
+    if (typeof value === "string") {
+        return value;
+    }
+
+    if (
+        Array.isArray(value) &&
+        value.every(item => typeof item === "string")
+    ) {
+        return value.join(" ");
+    }
+
+    return "";
+}
+
+function svgColor(value: unknown, fallback = "black"): string {
+    return typeof value === "string"
+        ? value
+        : fallback;
+}
+
+function svgNumber(value: unknown, fallback: number): number {
+    return typeof value === "number"
+        ? value
+        : fallback;
 }

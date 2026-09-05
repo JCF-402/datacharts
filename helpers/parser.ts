@@ -1,24 +1,21 @@
 
 import {create , all, isFunctionNode, isSymbolNode} from "mathjs";
-import type {MathNode, SymbolNode, FunctionNode, EvalFunction} from "mathjs";
+import type { EvalFunction} from "mathjs";
 
 
-import type {ChartOptions, ChartConfiguration, ChartType} from "chart.js/auto";
-import { Notice, App, TFile} from "obsidian";
+import type {ChartConfiguration, ChartType} from "chart.js/auto";
+import { TFile} from "obsidian";
 
 import { getApp } from "./appContext";
 
 import { customNotice,isTuple } from "main";
-import { validLineDatasetProperties,validBarDatasetProperties } from "./plotProperties";
-import { min } from "mathjs";
-import { string } from "mathjs";
-import { isArray } from "chart.js/dist/helpers/helpers.core";
+
 import {validObjProperties,validRoots} from "./plotProperties"
 
 
 const math = create(all!);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
-    ln: math.log,
+    ln: (x: number) => math.log(x)
 });
 
 
@@ -73,7 +70,6 @@ export type parsedText = {
 }
 
 
-type ParsedMathNode = ReturnType<typeof math.parse>;
 type SheetData = {
     columns: Record<string, string>;
     values: Record<string, string | number>;
@@ -458,7 +454,7 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
                         if (!nestedLocalRangeString) continue equationLoop;
 
                         const parsed: unknown = JSON.parse(nestedLocalRangeString);
-                        if (!Array.isArray(parsed) ||  !isTuple(parsed)) {
+                        if (!isNumberArray(parsed) ||  !isTuple(parsed)) {
                             continue equationLoop;
                         }
                         const nestedLocalRange: [number, number, number] = parsed;
@@ -470,7 +466,7 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
 
                     } else {
                     const compiledNestedExpr = math.compile(nestedExpr);
-                    scope[signature] = compiledNestedExpr.evaluate(scope); // if the expression is neither a scalar nor an array then its an expression. evaluate it with normal the current val
+                    scope[signature] = evaluateNumber(compiledNestedExpr, scope);; // if the expression is neither a scalar nor an array then its an expression. evaluate it with normal the current val
                     }
                 }
             }
@@ -682,7 +678,11 @@ export async function handleSourceData(lines: string[]): Promise<PlotData[]> {
                     const text = await app.vault.read(file);
                     try {
                         
-                        const data = JSON.parse(text);
+                        const data: unknown = JSON.parse(text);
+                        if (!isSheetData(data)) {
+                            throw new Error("Invalid sheet data");
+                        }
+                        
                         const extracted = extractSheet(data, signature, sourceInfo);
                         if (extracted !== null) {
                             results.push(extracted);
@@ -830,8 +830,8 @@ function extractSheet(sheetData: SheetData, signature: string, sourceInfo: strin
     const col2Info = info[1]?.trim() ?? "B"; // Defaults to B
     let col1:  string = "0"; 
     let col2:  string = "1";
-    let col1WRows: string | string[];
-    let col2WRows: string | string[];
+    //let col1WRows: string | string[];
+    //let col2WRows: string | string[];
     let sFlag = 0;
 
     if (!col1Info?.includes("(")) {
@@ -849,7 +849,7 @@ function extractSheet(sheetData: SheetData, signature: string, sourceInfo: strin
     } else if (col1Info.includes("(") && col1Info.includes(")")){
         // Scenarios 2 and 3
         // Here the key needs to be row1:col1 -> row2:col1
-        col1WRows = col1Info.replace(")","").split("(") // Becomes [col1 , row1:]
+        //col1WRows = col1Info.replace(")","").split("(") // Becomes [col1 , row1:]
 
 
     }
@@ -868,7 +868,7 @@ function extractSheet(sheetData: SheetData, signature: string, sourceInfo: strin
     } else if (col2Info.includes("(") && col2Info.includes(")")){
         // Scenarios 2 and 3
         // Here the key needs to be row1:col1 -> row2:col1
-        col2WRows = col2Info.replace(")","").split("(") // Becomes [col1 , row1:]
+        //col2WRows = col2Info.replace(")","").split("(") // Becomes [col1 , row1:]
     }
 
     switch (sFlag) {
@@ -982,7 +982,7 @@ function levD(a: string, b: string ): number {
     const rows = a.length + 1;
     const cols = b.length + 1;
 
-    const dist: number[][] = Array.from({length: rows}, () => Array(cols).fill(0));
+    const dist: number[][] = Array.from({ length: rows },() => Array.from({ length: cols }, () => 0));
 
     for (let i = 1; i < rows; i++) {
 
@@ -1015,7 +1015,7 @@ function levD(a: string, b: string ): number {
 
 function evaluateNumber(
     expression: EvalFunction,
-    scope: math.MathScope): number {
+    scope: Record<string, string | number>): number {
         const result: unknown = expression.evaluate(scope);
         if (typeof result !== "number") {
             throw new Error("Expression did not evaluate to a number");
@@ -1040,8 +1040,37 @@ function parseDataArray(value:string): Array<number | string> {
 function isDynamicObject(value: unknown): value is DynamicObject {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
+// This function checks if a value is an array of numbers. It returns true if the value is an array and every item in the array is a number, and false otherwise.
 function isNumberArray(value: unknown): value is number[] {
     return Array.isArray(value) &&
         value.every(item => typeof item === "number");
+}
+
+
+function isSheetData(value: unknown): value is SheetData {
+    if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value)
+    ) {
+        return false;
+    }
+
+    const obj = value as Record<string, unknown>;
+
+    if (
+        typeof obj.columns !== "object" ||
+        obj.columns === null ||
+        typeof obj.values !== "object" ||
+        obj.values === null
+    ) {
+        return false;
+    }
+
+    return (
+        Object.values(obj.columns).every(v => typeof v === "string") &&
+        Object.values(obj.values).every(
+            v => typeof v === "string" || typeof v === "number"
+        )
+    );
 }

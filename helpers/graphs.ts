@@ -79,7 +79,7 @@ export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
 function transformData(data: PlotData[], chartType: ChartType){
     switch(chartType){
         case "pie":
-        case "polarArea":
+        case "polarArea": {
             if (data.length > 1) {
                 customNotice("Pie and Polar Area charts are meant for 1 dataset. Use doughnut for multiple");
             };
@@ -93,9 +93,10 @@ function transformData(data: PlotData[], chartType: ChartType){
                         data: first.data.map(p => p.y)
                     }
                 ]
+            }
             };
-        case "doughnut":
-            case "radar":
+        case "doughnut": 
+            case "radar": {
                 const labels = data[0]?.data.map(p=> p.x) ?? [];
                 return {
                     labels,
@@ -105,7 +106,7 @@ function transformData(data: PlotData[], chartType: ChartType){
                             const found = ds.data.find(p => p.x === label);
                             return found ? found.y : null;
                         })
-                    }))
+                    }))}
                 };
         default:
             return undefined;

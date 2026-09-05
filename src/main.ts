@@ -1,19 +1,14 @@
 
-import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleSourceData, GlobalProperties, handleGlobalOptions} from "../helpers/parser"
+import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleSourceData, GlobalProperties} from "../helpers/parser"
 import { createPlot, buildDatasets, type DataChartsChart} from "../helpers/graphs";
 import {Menu, Notice, Plugin, MarkdownView} from "obsidian";
-import { apply } from "mathjs";
 import { setApp } from "../helpers/appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
-import { Chart, ChartOptions, ChartType} from "chart.js/auto";
+import {  ChartOptions, ChartType} from "chart.js/auto";
 import {autocompletion} from "@codemirror/autocomplete";
 import {generateSVG} from "../helpers/svgFormatting";
 import { PlotCompletionSource } from "../helpers/plotProperties";
-import { zoom } from "chartjs-plugin-zoom";
-import { divideScalarDependencies } from "mathjs";
-import { codePointSize } from "@codemirror/state";
-import { e } from "mathjs";
-import { simplify } from "mathjs";
+
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
@@ -101,18 +96,21 @@ export default class PlotPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
-		);
+		const loaded: unknown = await this.loadData();
+
+		const savedSettings =typeof loaded === "object" &&loaded !== null &&!Array.isArray(loaded)? loaded as Partial<PlotPluginSettings>: {};
+
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...savedSettings
+		};
 	}
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
 
 	async refreshOpenCharts() {
-		this.app.workspace.getLeavesOfType("markdown").forEach(async (leaf) => {
+		this.app.workspace.getLeavesOfType("markdown").forEach( (leaf) => {
 		const view = leaf.view as MarkdownView;
 		view.previewMode?.rerender(true);
 	});
@@ -214,19 +212,19 @@ export default class PlotPlugin extends Plugin {
 					if (!chartInstance) return;
 					this.charts.add(chartInstance); // Adds chart to list of charts
 					// Right-Click menu for chart options
-					canvas.addEventListener("contextmenu", async (e) => {
+					canvas.addEventListener("contextmenu", (e) => {
 						e.preventDefault();
 
 						const menu = new Menu();
 						menu.addItem((item) => item
-						.setTitle("Save PNG to Vault")
+						.setTitle("Save PNG to vault")
 						.setIcon("image-file")
 						.onClick( async () => {
 							await this.exportChartPNG(chartInstance)
 						}));
 
 						menu.addItem((item) => item
-						.setTitle("Save SVG to Vault")
+						.setTitle("Save SVG to vault")
 						.setIcon("image-file")
 						.onClick( async () => {
 							await this.exportChartSVG(chartInstance,chartType)
@@ -254,6 +252,7 @@ export default class PlotPlugin extends Plugin {
 			await this.app.vault.createBinary(path,bytes.buffer);
 		}
 		async exportChartSVG(chartInstance: DataChartsChart | undefined, chartType: ChartType, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.svg`) {
+		 if (!chartInstance) return;
 		 const svg = generateSVG(chartInstance,chartType);
 		 await this.app.vault.create(path, svg);
 		}
@@ -321,7 +320,7 @@ export function getDefaultPlotProperties(settings: PlotPluginSettings, chartType
 		...getTypeDefaults(chartType,settings)
 	};
 }
-
+/*
 function showError(container: HTMLElement, title: string, err: unknown) {
 	const msg = err instanceof Error ? err.message: String(err); 
 	container.empty();
@@ -330,7 +329,9 @@ function showError(container: HTMLElement, title: string, err: unknown) {
 	box.createEl("div",{text: simplifyError(msg)});
 	console.error(err);
 }
+*/
 
+/*
 function simplifyError(err: unknown): string {
 	const msg = err instanceof Error ? err.message : String(err);
 
@@ -343,7 +344,7 @@ function simplifyError(err: unknown): string {
 
 	return msg;
 }
-
+*/
 export function getTypeDefaults<T extends ChartType>(chartType: T, settings: PlotPluginSettings): ChartOptions<T> {
 		const style = getComputedStyle(document.body);
 		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
@@ -398,7 +399,7 @@ export function getTypeDefaults<T extends ChartType>(chartType: T, settings: Plo
 				},
 				indexAxis: "x"
 			} as ChartOptions<T>;
-		case "pie":
+		case "pie": {
 			const  pieOptions =  {
 				elements: {arc: {borderWidth: settings.EborderWidth}},
 				radius: "90%",
@@ -406,7 +407,8 @@ export function getTypeDefaults<T extends ChartType>(chartType: T, settings: Plo
 				circumference: 360
 			} satisfies ChartOptions<"pie">;
 			return pieOptions as unknown as ChartOptions<T>;
-		case "doughnut":
+		}
+		case "doughnut": {
 			const doughnutOptions =  {
 				elements: {arc: {borderWidth: settings.EborderWidth}},
 				radius: "90%",
@@ -415,6 +417,7 @@ export function getTypeDefaults<T extends ChartType>(chartType: T, settings: Plo
 				circumference: 360
 			} satisfies ChartOptions<"doughnut">;
 			return doughnutOptions as unknown as ChartOptions<T>;
+		}
 		case "polarArea":
 			return {
 				elements: {arc: {borderWidth: settings.EborderWidth}},

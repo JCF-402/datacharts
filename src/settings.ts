@@ -1,4 +1,4 @@
-import { PluginSettingTab, App, Setting, DropdownComponent } from "obsidian";
+import { PluginSettingTab, App, Setting} from "obsidian";
 import PlotPlugin from "main"
 
 type ScaleType = "linear" | "category" | "logarithmic";
@@ -205,7 +205,7 @@ export class PlotSettingTab extends PluginSettingTab {
 			)
 			new Setting(images)
 			.setName("Save image path")
-			.setDesc("Default path for saving charts as PNG or SVG. Defaults to Attachments/Charts/")
+			.setDesc("Default path for saving charts as PNG or SVG, defaults to Attachments/Charts/")
 			.addText(text => text
 				.setPlaceholder(this.plugin.settings.saveImagesPath)
 				.setValue(this.plugin.settings.saveImagesPath)
