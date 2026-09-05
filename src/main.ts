@@ -1,11 +1,11 @@
 
 import {handleMarkdown, evaluateExpressions, PlotData, parsedText, handleSourceData, GlobalProperties, handleGlobalOptions} from "../helpers/parser"
-import { createPlot, buildDatasets} from "../helpers/graphs";
+import { createPlot, buildDatasets, type DataChartsChart} from "../helpers/graphs";
 import {Menu, Notice, Plugin, MarkdownView} from "obsidian";
 import { apply } from "mathjs";
 import { setApp } from "../helpers/appContext";
 import { PlotPluginSettings, DEFAULT_SETTINGS, PlotSettingTab } from "settings";
-import {  ChartOptions, ChartType} from "chart.js/auto";
+import { Chart, ChartOptions, ChartType} from "chart.js/auto";
 import {autocompletion} from "@codemirror/autocomplete";
 import {generateSVG} from "../helpers/svgFormatting";
 import { PlotCompletionSource } from "../helpers/plotProperties";
@@ -17,7 +17,7 @@ import { simplify } from "mathjs";
 
 export default class PlotPlugin extends Plugin {
 	settings!: PlotPluginSettings;
-	private charts = new Set<any>();
+	private charts = new Set<DataChartsChart>();
 
 	async onload() { // Loads plugin
 		await this.loadSettings();
@@ -43,7 +43,7 @@ export default class PlotPlugin extends Plugin {
 			if (defaultProperties === undefined) return;
 			
 			let cachedParsedText = await handleMarkdown(newMarkdown,defaultProperties,chartType); // Evaluates all the markdown in the codeblock and creates a ParsedText type object.
-			let chartInstance: any = undefined;
+			let chartInstance: DataChartsChart | undefined = undefined;
 
 			
 
@@ -150,7 +150,7 @@ export default class PlotPlugin extends Plugin {
 		return newMarkdown;
 	}
 
-	async renderLine(cachedParsedText: parsedText, cachedEquationData: PlotData[], chartInstance: any, el: HTMLElement, chartType: ChartType) {
+	async renderLine(cachedParsedText: parsedText, cachedEquationData: PlotData[], chartInstance: DataChartsChart | undefined, el: HTMLElement, chartType: ChartType): Promise<DataChartsChart|undefined> {
 		const parsedText = cachedParsedText; 
 		const globalProperties = parsedText.globalProperties; // Gets all global properties
 
@@ -160,14 +160,10 @@ export default class PlotPlugin extends Plugin {
 			...parsedText.tableData // Will always be the latest table data stored in the cache.
 			]
 
-			//console.log(JSON.stringify(parsedText.chartOptions, null, 2));
-			//console.log(data);
-			//console.log(parsedText.tableData);
-
 			return await this.createChartInstane(chartInstance,el,globalProperties,data,parsedText, chartType);
 		};
 
-	async renderBar(cachedParsedText: parsedText, chartInstance: any,el: HTMLElement, chartType: ChartType) {
+	async renderBar(cachedParsedText: parsedText, chartInstance: DataChartsChart | undefined,el: HTMLElement, chartType: ChartType): Promise<DataChartsChart|undefined> {
 		const parsedText = cachedParsedText;
 				const globalProperties = parsedText.globalProperties; // Gets all global properties
 				const data: PlotData[] = [
@@ -176,7 +172,7 @@ export default class PlotPlugin extends Plugin {
 				]
 				return await this.createChartInstane(chartInstance,el,globalProperties,data,parsedText, chartType);
 			};
-	async renderCircular(cachedParsedText: parsedText, chartInstance: any, el: HTMLElement, chartType: ChartType){
+	async renderCircular(cachedParsedText: parsedText, chartInstance: DataChartsChart | undefined, el: HTMLElement, chartType: ChartType): Promise<DataChartsChart|undefined> {
 		const parsedText = cachedParsedText;
 		const globalProperties = parsedText.globalProperties;
 		const data: PlotData[] = [
@@ -188,7 +184,7 @@ export default class PlotPlugin extends Plugin {
 	};
 
 
-		async createChartInstane (chartInstance: any, el: HTMLElement, globalProperties: GlobalProperties[], data: PlotData[], parsedText: parsedText, chartType: ChartType) {
+		async createChartInstane (chartInstance: DataChartsChart | undefined, el: HTMLElement, globalProperties: GlobalProperties[], data: PlotData[], parsedText: parsedText, chartType: ChartType) {
 				if (!chartInstance) {
 					const wrapper = el.createDiv("plot-wrapper");
 					let globalSignatures = globalProperties.map(s => {return s.signature}); // Array of only signatures
@@ -215,6 +211,7 @@ export default class PlotPlugin extends Plugin {
 					})
 
 					chartInstance = createPlot(canvas,data,parsedText.lineProperties,parsedText.chartOptions, chartType); // Chart is created. 
+					if (!chartInstance) return;
 					this.charts.add(chartInstance); // Adds chart to list of charts
 					// Right-Click menu for chart options
 					canvas.addEventListener("contextmenu", async (e) => {
@@ -245,7 +242,8 @@ export default class PlotPlugin extends Plugin {
 			return chartInstance;
 		};
 		// Export functions
-		async exportChartPNG(chartInstance: any, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.png`){
+		async exportChartPNG(chartInstance: DataChartsChart | undefined, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.png`){
+			if (!chartInstance) return;
 			const base64 = chartInstance.toBase64Image("image/png",1);
 			const base64Data = base64.replace(/^data:image\/png;base64,/,"");
 			const binary = atob(base64Data);
@@ -255,7 +253,7 @@ export default class PlotPlugin extends Plugin {
 			}
 			await this.app.vault.createBinary(path,bytes.buffer);
 		}
-		async exportChartSVG(chartInstance: any, chartType: ChartType, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.svg`) {
+		async exportChartSVG(chartInstance: DataChartsChart | undefined, chartType: ChartType, path = `${this.settings.saveImagesPath}/Chart_${Date.now()}.svg`) {
 		 const svg = generateSVG(chartInstance,chartType);
 		 await this.app.vault.create(path, svg);
 		}
@@ -346,7 +344,7 @@ function simplifyError(err: unknown): string {
 	return msg;
 }
 
-export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettings): ChartOptions<ChartType> {
+export function getTypeDefaults<T extends ChartType>(chartType: T, settings: PlotPluginSettings): ChartOptions<T> {
 		const style = getComputedStyle(document.body);
 		const fontFamily = style.getPropertyValue("--font-interface").trim() || "sans-serif";
 	switch (chartType) {
@@ -368,7 +366,7 @@ export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettin
 						title: {display: !settings.titleStatus, text: ""}
 					},
 				}
-			}
+			} as ChartOptions<T>;
 		case "scatter":
 			return {
 				elements: {
@@ -387,7 +385,7 @@ export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettin
 						title: {display: !settings.titleStatus, text: ""}
 					},
 				}
-			}
+			} as ChartOptions<T>;
 		case "bar": 
 			return {
 				elements: {
@@ -399,27 +397,29 @@ export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettin
 					y: {type: settings.yScalesType, stacked: false, grid: {display: true}, title: {display: !settings.titleStatus, text: ""}} 
 				},
 				indexAxis: "x"
-			};
+			} as ChartOptions<T>;
 		case "pie":
-			return {
+			const  pieOptions =  {
 				elements: {arc: {borderWidth: settings.EborderWidth}},
 				radius: "90%",
 				rotation: 0,
 				circumference: 360
-			} as any;
+			} satisfies ChartOptions<"pie">;
+			return pieOptions as unknown as ChartOptions<T>;
 		case "doughnut":
-			return {
+			const doughnutOptions =  {
 				elements: {arc: {borderWidth: settings.EborderWidth}},
 				radius: "90%",
 				cutout: "50%",
 				rotation: 0,
 				circumference: 360
-			} as any;
+			} satisfies ChartOptions<"doughnut">;
+			return doughnutOptions as unknown as ChartOptions<T>;
 		case "polarArea":
 			return {
 				elements: {arc: {borderWidth: settings.EborderWidth}},
 				scales: {r: {beginAtZero: true, ticks: {backdropColor: "transparent"}}}
-			} as any;
+			} as ChartOptions<T>;
 		case "radar":
 	return {
 				elements: {line: {borderWidth: settings.EborderWidth,tension: 0.15,fill: true},
@@ -432,10 +432,10 @@ export function getTypeDefaults(chartType: ChartType, settings: PlotPluginSettin
 				}
 			}
 		}
-	};
+	} as ChartOptions<T>;
 
 		default:
-			return {};		
+			return {} as ChartOptions<T>;		
 	}
 }
 

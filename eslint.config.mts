@@ -20,8 +20,13 @@ export default tseslint.config(
 				extraFileExtensions: ['.json']
 			},
 		},
+
 	},
 	...obsidianmd.configs.recommended,
+	{
+
+	},
+
 	globalIgnores([
 		"node_modules",
 		"dist",

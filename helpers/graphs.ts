@@ -14,7 +14,7 @@ type Dataset = {
     [key: string]: number | string | Data[]
 }
 
-Chart.register(zoomPlugin as any);
+Chart.register(zoomPlugin);
 
 export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd: LineProperties[], plotProperties: ChartConfiguration["options"], chartType: ChartType ) {
     if (chartType === "pie" || chartType === "doughnut" || chartType === "polarArea" || chartType === "radar"){
@@ -40,6 +40,8 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
     };
 
 }
+export type DataChartsChart = Exclude<ReturnType<typeof createPlot>, undefined>;
+
 
 export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
 	return data.map(eq => {

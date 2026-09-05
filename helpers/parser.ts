@@ -1,5 +1,7 @@
 
-import {create , all} from "mathjs";
+import {create , all, isFunctionNode, isSymbolNode} from "mathjs";
+import type {MathNode, SymbolNode, FunctionNode, EvalFunction} from "mathjs";
+
 
 import type {ChartOptions, ChartConfiguration, ChartType} from "chart.js/auto";
 import { Notice, App, TFile} from "obsidian";
@@ -12,15 +14,14 @@ import { min } from "mathjs";
 import { string } from "mathjs";
 import { isArray } from "chart.js/dist/helpers/helpers.core";
 import {validObjProperties,validRoots} from "./plotProperties"
-import { sign } from "mathjs";
-import { column } from "mathjs";
 
-const math = create(all);
+
+const math = create(all!);
 math.import({ // Created an alias so the user can write the more "normal" ln(x) and Mathjs wont hate me.
     ln: math.log,
 });
 
-type CompiledExpression = any; // Not good I know
+
 
 export type Equation = {
     expr: string,
@@ -67,9 +68,18 @@ export type parsedText = {
     equations: Equation[],
     nestedEquations: NestedEquations[],
     manualData: PlotData[]
-    tableData: PlotData[] | any
+    tableData: PlotData[];
 
 }
+
+
+type ParsedMathNode = ReturnType<typeof math.parse>;
+type SheetData = {
+    columns: Record<string, string>;
+    values: Record<string, string | number>;
+};
+type DynamicObject = Record<string, unknown>;
+
 
 
 const builtInConstants = ["e","E","pi","PI"];
@@ -155,7 +165,7 @@ function handleManualData(lines: string[]) {
     }
     return datasets; 
 }
-
+// This function takes an array of RawExpr objects and returns an array of PlotData objects. Each PlotData object contains a signature and an array of Data points. The function parses the expressions in the RawExpr objects to extract the x and y values for each data point.
 function getData(datasets: RawExpr[]) {
     const results = [];
 
@@ -167,14 +177,14 @@ function getData(datasets: RawExpr[]) {
             data.signature = name;
         }
         const vars = getVariable(data); // Gets the variables for the current data object so data(name) = [x,y] gets x and y as variables.
-        const objData: (string[] | number[])[] = []; // Stores data about the current data:: object
+        const objData: Array<Array<string|number>> = []; // Stores data about the current data:: object
         for (let v of datasets) {
 
             if (vars.includes(v.signature)) {
                 if (v.signature.trim() === vars[0]) {
                 // v is currently something like x :: [0.3,0.4,0.5] but can also be strings ["Monday","Tuesday"]
                         try {
-                            objData.push(JSON.parse(v.expr.trim())); // Gives me an any but JSON just works well for numbers
+                            objData.push(parseDataArray(v.expr.trim())); // Gives me an any but JSON just works well for numbers
                         } catch {
                             const safe = (v.expr.replace("[","").replace("]","").split(",").map((s: string) => s.trim()));
                             objData.push(safe);
@@ -183,7 +193,7 @@ function getData(datasets: RawExpr[]) {
                 } 
                 else if (v.signature.trim() === vars[1]) {
                         try {
-                          objData.push(JSON.parse(v.expr.trim()));
+                          objData.push(parseDataArray(v.expr.trim()));
                         } catch {
                             const safe = (v.expr.replace("[","").replace("]","").split(",").map((s: string) => s.trim()));
                             objData.push(safe)
@@ -212,7 +222,7 @@ function getData(datasets: RawExpr[]) {
     }
     return results;
 }
-
+// This function takes a string representation of an array and returns an array of numbers or strings. It uses JSON.parse to parse the string and checks if the result is a valid array of numbers or strings. If the result is not valid, it throws an error.
 export function handleNestedEquations(lines: string[]) {
     const nestedEquations = []
     for (let line of lines) {
@@ -267,7 +277,10 @@ export function handlePlotProperties(lines: string[], defaultProperties: ChartCo
 
 function helperPlotProperties(properties: ChartConfiguration["options"], key: string, value: string) {
     const path = key.split("."); // scales.x.title -> [scales, x, title]
-    let current: any = properties; // running copy of the properties. Any is needed because I am dynamically accessing a chartoptions
+    if (!properties) return;
+
+    
+    let current = properties as DynamicObject; // running copy of the properties. Any is needed because I am dynamically accessing a chartoptions
     // object that requires static keys. I am already checking if the properties are valid in handlePlotProperties
     // typescript doesnt know this because I am checking against a personal list. 
     for (let i = 0; i < path.length; i++) {
@@ -276,11 +289,18 @@ function helperPlotProperties(properties: ChartConfiguration["options"], key: st
         if (k === undefined) return;
 
         if (i === path.length - 1) {
-            current[k] = parseValue(value)
+            current[k] = parseValue(value);
+            return;
+        }
+        const next = current[k];
+
+        if (!isDynamicObject(next)) {
+            const newObject: DynamicObject = {};
+            current[k] = newObject;
+            current = newObject;
         }
         else {
-            current[k] ??= {};
-            current = current[k];
+            current = next;
         }
     }
 }
@@ -358,7 +378,7 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
         // -----------------------------------------------------------------
 
         // --------- Handle Nested Equations ------------------
-        const compiledNested: Record<string, string | number | CompiledExpression> = {}; // CompiledExpressions is any but it helps visualize
+        const compiledNested: Record<string, string | number | number[]> = {}; // CompiledExpressions is any but it helps visualize
         // the kind of values I expect to receive.
 
         for (let obj of parsedText.nestedEquations) {
@@ -407,7 +427,7 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
                 if (typeof nestedExpr === "number") {
                     scope[signature] = nestedExpr; // if the expression is a scalar (constant). Simply assign it to the scope with the signature as its variable. 
                 } 
-                else if (Array.isArray(nestedExpr)) { // if the expression is a list of values the current equation needs to be evaluated with the current val
+                else if (isNumberArray(nestedExpr)) { // if the expression is a list of values the current equation needs to be evaluated with the current val
                     // at each value in the array. 
                     // So if f(x) = x^2 * D -> D: [0.3,0.4,0.5]. We get three plots, one for each D value. 
                     // ONLY the equation that contains the nested function needs to be plotted. Other functions work as normal.
@@ -436,7 +456,13 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
                         if (!ranges[inderange]) continue equationLoop;
                         const nestedLocalRangeString = ranges[inderange].split("=")[1];
                         if (!nestedLocalRangeString) continue equationLoop;
-                        let nestedLocalRange: [number,number,number] = JSON.parse(nestedLocalRangeString);
+
+                        const parsed: unknown = JSON.parse(nestedLocalRangeString);
+                        if (!Array.isArray(parsed) ||  !isTuple(parsed)) {
+                            continue equationLoop;
+                        }
+                        const nestedLocalRange: [number, number, number] = parsed;
+
                         if (variable === undefined) continue equationLoop;
                         results.push(...handleNestedIndependant(equation,variable,localRange,nestedLocalRange,nestedExpr,signature, nestInfo,scope));
                         continue equationLoop;
@@ -449,7 +475,7 @@ export function evaluateExpressions(parsedText: parsedText, range: [number,numbe
                 }
             }
 
-            let y: number = compile.evaluate(scope);
+            const y = evaluateNumber(compile,scope); // Evaluate the current equation with the current val and the current scope. The scope contains all variables that are needed to evaluate the current equation.
 
             const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
 
@@ -475,8 +501,26 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
 
     const node = math.parse(expr.expr);
     const vars = new Set<string>();
+    node.traverse((currentNode, _path, parent) => {
+        if (isSymbolNode(currentNode)) {
 
-    node.traverse(function (node: any, path: string, parent: any){
+            // Ignore function names such as sin, cos, G, etc.
+            if (
+                parent &&
+                isFunctionNode(parent) &&
+                parent.fn === currentNode
+            ) {
+                return;
+            }
+
+            vars.add(currentNode.name);
+        }
+    });
+
+    return [...vars];
+    /*
+    node.traverse(
+        function (node: any, path: string, parent: any){
         if (node.isSymbolNode) {
             if (parent && parent.isFunctionNode && parent.fn === node) { //Filters out functions.
                 return;
@@ -484,6 +528,7 @@ export function getVariable(expr: Equation | NestedEquations | RawExpr) {
             vars.add(node.name);
         }
     })
+    */
     return [...vars];
 
 }
@@ -506,7 +551,10 @@ function handleNestedArray(mainExpr: string ,variable: string, localRange: [numb
                 [variable]: val,
                 [name]: i
             }
-            let y = expr.evaluate(scope);
+            const y = evaluateNumber(expr,scope); // Evaluate the current equation with the current val and the current scope. The scope contains all variables that are needed to evaluate the current equation.
+            // Check for discontinuities. If there is a discontinuity, we push a NaN value to the data points and continue to the next iteration.
+            // This is to avoid plotting a line between two points that are not connected.
+            // If there is no discontinuity, we push the current point to the data points.
             const isDiscontinuity = handleDiscontinuities(mDataPoints,localRange,y);
             if (isDiscontinuity === undefined) continue; 
             if (isDiscontinuity) { 
@@ -523,7 +571,7 @@ function handleNestedArray(mainExpr: string ,variable: string, localRange: [numb
 }
 
 function handleNestedIndependant(eq: Equation, variable: string, localRange: [number,number,number], 
-    nestedLocalRange: [number,number,number], nestedExpr: any, signature: string, nestInfo: string[][], baseScope: Record<string, string | number>): PlotData[]{
+    nestedLocalRange: [number,number,number], nestedExpr: string, signature: string, nestInfo: string[][], baseScope: Record<string, string | number>): PlotData[]{
     
     const nestedResults: number[] = [];
     // Get Main Equation Variable --------------------------------------
@@ -548,7 +596,7 @@ function handleNestedIndependant(eq: Equation, variable: string, localRange: [nu
             ...baseScope,
         };
         nestedScope[nestedVariable] = i;
-        let nestedY = nestedEquation.evaluate(nestedScope);
+        const nestedY = evaluateNumber(nestedEquation, nestedScope);
         nestedResults.push(nestedY);
     };
     return handleNestedArray(eq.expr, variable, localRange, nestedResults, signature, baseScope, nestedVariable);
@@ -581,9 +629,9 @@ function handleDiscontinuities(mDataPoints: Data[], localRange: [number, number,
 }
 
 // Handles source :: types
-export async function handleSourceData(lines: string[]) {
+export async function handleSourceData(lines: string[]): Promise<PlotData[]> {
     const app = getApp();
-    const results = [];
+    const results: PlotData[] = [];
     
 	for (let line of lines) {
         // Syntax is source(dataLabel) :: tableSelector[col1,col2] is table from path
@@ -635,8 +683,10 @@ export async function handleSourceData(lines: string[]) {
                     try {
                         
                         const data = JSON.parse(text);
-                        
-                        results.push(extractSheet(data, signature, sourceInfo));
+                        const extracted = extractSheet(data, signature, sourceInfo);
+                        if (extracted !== null) {
+                            results.push(extracted);
+                        }
                     } catch {
                         customNotice("Could not find source data. Check sheet.", "notice-warning");
                     }
@@ -762,7 +812,7 @@ function extractTable(markdown: string, signature: string, sourceInfo: string) {
     return { signature: signature, data: data };
 }
 
-function extractSheet(sheetData: any, signature: string, sourceInfo: string) {
+function extractSheet(sheetData: SheetData, signature: string, sourceInfo: string): PlotData|null {
     // SourceInfo can be three things
     // 1. [col1 , col2] where each col is a letter A,B, etc or a custom Name. In this case we search the whole column until no more blanks
     // 2. [col1(row1) , col2(row1)] starting row. Same as above but start at a custom row
@@ -771,7 +821,7 @@ function extractSheet(sheetData: any, signature: string, sourceInfo: string) {
     const data: Data[] = []
     if (!sourceInfo.trim().startsWith("[") || !sourceInfo.trim().endsWith("]")) {
         customNotice("Missing bracket for sheet source info.","notice-error")
-        return;
+        return null;
     }
     // Split the info so that its an array with [col1, col2]
     const info = sourceInfo.replace("[","").replace("]","").split(",") ;
@@ -824,16 +874,16 @@ function extractSheet(sheetData: any, signature: string, sourceInfo: string) {
     switch (sFlag) {
         case 1: {
             // Scenario 1 get data where col is just a column name not rows specified
-            for (let key in sheetData.values) {
+            for (const [key, xV] of Object.entries(sheetData.values)) {
                 const [row, col] = key.split(":");
+
+                if (row === undefined || col === undefined) continue;
+
                 if (col === col1) {
                     const yKey = `${row}:${col2}`;
-                    const xV = sheetData.values[key];
                     const yV = sheetData.values[yKey];
-
-                    if (yV !== undefined) {
-                        data.push({x: isNaN(Number(xV)) ? xV : Number(xV), y: isNaN(Number(yV)) ? yV : Number(yV)});
-                    }
+                    if (yV === undefined) continue;
+                    data.push({x: isNaN(Number(xV)) ? xV : Number(xV), y: isNaN(Number(yV)) ? yV : Number(yV)});
                 }
             }
             return {signature: signature, data: data};
@@ -959,4 +1009,39 @@ function levD(a: string, b: string ): number {
 
     return dist[rows-1]![cols-1]!;
 
+}
+// This function evaluates a compiled expression and ensures that the result is a number. If the result is not a number, it throws an error.
+// This is important because the mathjs library can return different types of results, and we want to ensure that we are working with numbers for plotting.
+
+function evaluateNumber(
+    expression: EvalFunction,
+    scope: math.MathScope): number {
+        const result: unknown = expression.evaluate(scope);
+        if (typeof result !== "number") {
+            throw new Error("Expression did not evaluate to a number");
+        }
+        return result;
+    }
+
+    // This function parses a string representation of an array and ensures that the result is an array of numbers or strings. If the result is not a valid array, it throws an error.
+    // This is important because the source data can be in different formats, and we want to ensure that we are working with valid data for plotting.
+function parseDataArray(value:string): Array<number | string> {
+    const parsed: unknown = JSON.parse(value);
+
+    if (!Array.isArray(parsed) || !parsed.every(item => typeof item === "number" || typeof item === "string")) {
+        throw new Error("Parsed data is not a valid array of numbers or strings");
+    }
+    return parsed;
+}
+
+// This function checks if a value is a dynamic object, which is an object that can have any string keys and values of any type. It returns true if the value is a dynamic object, and false otherwise.
+// This is useful for type checking in TypeScript, as it allows us to narrow down the type of a value and ensure that we are working with the expected data structure.
+
+function isDynamicObject(value: unknown): value is DynamicObject {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNumberArray(value: unknown): value is number[] {
+    return Array.isArray(value) &&
+        value.every(item => typeof item === "number");
 }
