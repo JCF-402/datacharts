@@ -43,6 +43,9 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 ## Changelog
 
+### 1.0.4 
+- Focused on improving type safety issues with MathJs, ChartJs and in general.
+
 ### 1.0.3
 - Added support for Nested Independent Equations. For details look at docs.
 - Changed xrange to range
