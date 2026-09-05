@@ -42,6 +42,8 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 
 ## Changelog
+### 1.0.5
+- Fixed ESLint errors in settings.ts and main.ts
 
 ### 1.0.4 
 - Focused on improving type safety issues with MathJs, ChartJs and in general.
