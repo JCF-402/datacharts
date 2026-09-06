@@ -43,6 +43,11 @@ Found a bug or have an idea? Open a GitHub Issue.
 
 ## Changelog
 
+### 1.0.7
+- Fixed issue where printing note to PDF would have the plots cut-off. 
+- Fixed issue where type :: line,bar,etc would not register, prompting notice.
+- Added property **functionName.legend** that allows you to turn off the legend label for that specific functionName by setting it to false.
+
 ### 1.0.6
 - Stopped using Regex to parse equations (in some places).
 Instead using mathjs own node system to parse
