@@ -80,7 +80,7 @@ export function buildDatasets(data: PlotData[], parsedMd: LineProperties[]) {
                     dataset.borderColor = p.value;
                 }
             }
-            else {
+            else if (p.property !== "legend") { // Intentionally ignoreing legend because it is not a property of Chart.js but I want it to appear in the autocomplete
                 findPossibleProperty(p.property,[...validLineDatasetProperties,...validBarDatasetProperties],"LineProperty");
             }
 		});

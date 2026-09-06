@@ -65,3 +65,19 @@
     font-family: var(--font-monospace);
     white-space: pre-wrap;
 }
+
+@media print {
+    .plot-wrapper {
+        width: 100% !important;
+        max-width: 100% !important;
+
+        break-inside: avoid;
+        page-break-inside: avoid;
+
+        overflow: visible !important;
+    }
+
+    .plot-wrapper canvas {
+        max-width: 100% !important;
+    }
+}

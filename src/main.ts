@@ -25,6 +25,19 @@ export default class PlotPlugin extends Plugin {
 			})]
 		)
 
+		this.registerDomEvent(window, "beforeprint", () => {
+			for (const chart of this.charts) {
+				chart.resize();
+			}
+		});
+		this.registerDomEvent(window, "afterprint", () => {
+			for (const chart of this.charts) {
+				chart.resize();
+			}
+		});		
+
+
+
 		
 
 		setApp(this.app); // Sets current app as the working app to use globally. 
@@ -39,9 +52,10 @@ export default class PlotPlugin extends Plugin {
 			
 			let cachedParsedText = await handleMarkdown(newMarkdown,defaultProperties,chartType); // Evaluates all the markdown in the codeblock and creates a ParsedText type object.
 			let chartInstance: DataChartsChart | undefined = undefined;
-
+			//console.log(JSON.stringify(cachedParsedText.lineProperties));
+			//console.log(JSON.stringify(cachedParsedText.chartOptions));
 			
-
+			
 			let globalrange = checkGlobalRange(cachedParsedText) // Gets the global range for the current codeblock. This is because the plot might have a global definition of the range.
 
 			let cachedEquationData: PlotData[] = evaluateExpressions(cachedParsedText, isTuple(globalrange) ? globalrange : [-10,10,0.1]); //Evaluates all expressions, if any, inside the codeblock.
@@ -71,6 +85,7 @@ export default class PlotPlugin extends Plugin {
 			};
 
 			await renderCurrentChart();
+			
 
 			this.registerEvent( // Register event 
 				this.app.vault.on("modify", async (file) => { // where the event is a modification of the file
@@ -119,8 +134,9 @@ export default class PlotPlugin extends Plugin {
 	getChartTypes(markdown: string[]): ChartType {
 		const lines = markdown;
 		for (const line of lines) {
-			if (line.startsWith("type::") || line.startsWith("Type::")) {
-				const path = line.split("::");
+			const cleaned = line.replace(/\s+/g, "");
+			if (cleaned.startsWith("type::") || cleaned.startsWith("Type::")) {
+				const path = cleaned.split("::");
 				if ( path[1] === undefined) continue;
 				const type = path[1].trim() as ChartType
 				return type;
