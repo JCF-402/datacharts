@@ -29,6 +29,7 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
             }}); 
     } else {
         const datasets = buildDatasets(data,parsedMd);
+        
             return new Chart(canvas, {
             type: chartType,
             data: {
@@ -36,6 +37,19 @@ export function createPlot(canvas: HTMLCanvasElement, data: PlotData[], parsedMd
             options: {
 
                 ...plotProperties,
+                plugins: {
+                    ...plotProperties?.plugins,
+                    legend: {
+                        ...plotProperties?.plugins?.legend,
+                        labels: {
+                            ...plotProperties?.plugins?.legend?.labels,
+                            filter: (legendItem, chartData) => {
+                                const dataset = chartData.datasets[legendItem.datasetIndex!];
+                                if (!dataset) return true; // Show legend item if dataset is not found to have a legend property
+                                const legendProperty = parsedMd.find(p => p.signature === dataset.label && p.property === "legend");
+                                return legendProperty?.value !== "false"; // Show legend item only if legend property is not set to false
+                            }}}
+                            }
             }});
     };
 

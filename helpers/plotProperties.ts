@@ -76,7 +76,8 @@ export const validLineDatasetProperties = [
 	"range",
 	"pointStyle",
 	"pointRadius",
-	"hidden"
+	"hidden",
+    "legend"
 ]
 
 export const globalOptions = [

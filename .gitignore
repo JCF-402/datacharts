@@ -23,3 +23,6 @@ data.json
 
 # Exclude personal vault file updated
 compile-sync.sh
+
+# Exclude personal vault file updated
+build_test.sh
